@@ -10,6 +10,7 @@
 <meta name="theme-color" content="#00384d">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 <link rel="stylesheet" href="./css/pwa-styles.css">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
 <style>
 :root {
 --bg: #f8fafc;
@@ -297,6 +298,7 @@ box-shadow: 0 2px 6px rgba(0,0,0,0.05);
 <button class="btn-add" onclick="add()">Agregar</button>
 <button class="btn-clear" onclick="wipe()">Borrar Todo</button>
 <button class="btn-clear" onclick="toggleNormativa()">Normativa</button>
+<button class="btn-clear" style="background:#00384d;" onclick="generarInformeTecnico()">📄 Informe Técnico PDF</button>
 </div>
 <h1 class="page-title">Monitoreo de Cadena de Frío para Medicamentos Refrigerados - Farmacia</h1>
 <div id="app" class="device-list"></div>
@@ -387,7 +389,20 @@ box-shadow: 0 2px 6px rgba(0,0,0,0.05);
 <script>
 const MAX = 8.0, MIN = 2.0;
 const WIFI_CUTOFF = 10;
-let db = JSON.parse(localStorage.getItem('iot_db_farmacia')) || [];
+const APPS_SCRIPT_FARMACIA = 'https://script.google.com/macros/s/AKfycby3Le4QQbUuyDait1dGGVBIVaVCc1EVheFI0z_Kr9fUHjna1XX4bujHvV3gv9e1_evo4A/exec';
+
+// ── Canales pre-cargados de fábrica ──────────────────────────────────────────
+const CANALES_DEFAULT = [
+  { id: '2982082', k: 'QNVRZIG08IBMZD2A', n: 'Depósito 1', type: 'farmacia', fields: ['field1'],         area: 'Depósito' },
+  { id: '2982085', k: 'F7X0FHMTQGVZNHJ4', n: 'Depósito 2', type: 'farmacia', fields: ['field1','field2'], area: 'Depósito' },
+  { id: '2981109', k: 'QQFIB5N64K8KH86H', n: 'Farmacia Ambulatoria', type: 'farmacia', fields: ['field1'], area: 'Farmacia Ambulatoria' }
+];
+
+let db = JSON.parse(localStorage.getItem('iot_db_farmacia'));
+if (!db || db.length === 0) {
+  db = JSON.parse(JSON.stringify(CANALES_DEFAULT));
+  localStorage.setItem('iot_db_farmacia', JSON.stringify(db));
+}
 function formatDurationFull(minutesFloat) {
 const totalSeconds = Math.round(minutesFloat * 60);
 const d = Math.floor(totalSeconds / 86400);
@@ -402,9 +417,10 @@ if (s > 0 || parts.length === 0) parts.push(`${s} seg`);
 return parts.join(' ');
 }
 function init() {
-render();
-setInterval(refresh, 10000);
-refresh();
+  render();
+  setInterval(refresh, 10000);
+  refresh();
+  verificarTareasSemanales();
 }
 function add() {
 try {
@@ -591,7 +607,7 @@ setTimeout(() => window.open(`https://www.google.com/search?q=${encodeURICompone
 });
 }
 }
-// === FUNCIONES DE NOTIFICACIONES PUSH ===
+// === NOTIFICACIONES PUSH ===
 function checkTemperatureAlerts(sensorName, temperature, minTemp, maxTemp) {
   if (temperature < minTemp || temperature > maxTemp) {
     if ('Notification' in window && Notification.permission === 'granted') {
@@ -604,11 +620,194 @@ function checkTemperatureAlerts(sensorName, temperature, minTemp, maxTemp) {
     }
   }
 }
+
+// === TRAZABILIDAD ===
+function generarCodigoTrazabilidad(prefijo) {
+  const now = new Date();
+  const fecha = now.toISOString().slice(0,10).replace(/-/g,'');
+  const hora  = now.toTimeString().slice(0,8).replace(/:/g,'');
+  const rand  = Math.random().toString(36).toUpperCase().slice(2,7);
+  return `${prefijo}-${fecha}-${hora}-${rand}`;
+}
+
+// === INFORME TÉCNICO PDF (botón manual) ===
+function generarInformeTecnico() {
+  // Recolectar datos actuales
+  const sensores = db.map(c => {
+    const datos = [];
+    (c.fields || []).forEach(f => {
+      const val = document.getElementById(`v-${c.id}-${f}`);
+      const lbl = document.getElementById(`l-${c.id}-${f}`);
+      datos.push({
+        sensor: lbl ? lbl.innerText : f,
+        valor:  val  ? val.innerText  : '--'
+      });
+    });
+    return { nombre: c.n, area: c.area || '', datos };
+  });
+
+  const trazabilidad = generarCodigoTrazabilidad('RPT-FARM');
+  const ahora = new Date().toLocaleString('es-AR');
+
+  let filas = '';
+  sensores.forEach(s => {
+    s.datos.forEach(d => {
+      const val = parseFloat(d.valor);
+      const estado = isNaN(val) ? '—' : (val >= MIN && val <= MAX ? '✅ OK' : '⚠️ ALERTA');
+      filas += `<tr><td>${s.area}</td><td>${s.nombre}</td><td>${d.sensor}</td><td style="font-size:1.2em;font-weight:700">${d.valor}°C</td><td>${estado}</td></tr>`;
+    });
+  });
+
+  const html = `<!DOCTYPE html><html><head><meta charset="UTF-8"><style>
+    body{margin:0;padding:0;font-family:'Segoe UI',sans-serif;color:#1e293b;}
+    h2{color:#00384d;margin:0 0 4px 0;font-size:16pt;}
+    p.sub{color:#64748b;margin:0 0 12px 0;font-size:9pt;}
+    hr{border:none;border-top:2px solid #00384d;margin-bottom:16px;}
+    table{width:100%;border-collapse:collapse;margin-bottom:16px;}
+    th,td{padding:8px;border:1px solid #e2e8f0;font-size:9pt;text-align:left;}
+    th{background:#f1f5f9;font-weight:bold;}
+    .footer{margin-top:20px;font-size:8pt;color:#64748b;border-top:1px solid #eee;padding-top:8px;}
+  </style></head><body>
+    <h2>Informe Técnico – Cadena de Frío Farmacia</h2>
+    <p class="sub">Sistema Vicus – Hospital Natalio Burd | Generado: ${ahora}</p><hr>
+    <table><thead><tr><th>Área</th><th>Canal</th><th>Sensor</th><th>Temperatura</th><th>Estado</th></tr></thead>
+    <tbody>${filas}</tbody></table>
+    <div class="footer">
+      <p>Rango admisible: +${MIN}°C a +${MAX}°C</p>
+      <p>Trazabilidad: <strong>${trazabilidad}</strong></p>
+      <p>Fecha de emisión: ${ahora}</p>
+      <p>Desarrollado por Ingeniero Perez Ramiro – Vicus</p>
+    </div></body></html>`;
+
+  const filename = `InformeFarmacia_${trazabilidad}.pdf`;
+  const opt = { margin:12, filename, image:{type:'jpeg',quality:0.98}, html2canvas:{scale:2,useCORS:true}, jsPDF:{unit:'mm',format:'a4',orientation:'portrait'} };
+
+  html2pdf().set(opt).from(html,'string').outputPdf('datauristring').then(pdfB64 => {
+    // Descarga local
+    const link = document.createElement('a');
+    link.href = pdfB64;
+    link.download = filename;
+    link.click();
+    // Guardar en Drive (carpeta Informes individuales)
+    const xhr = new XMLHttpRequest();
+    xhr.open('POST', APPS_SCRIPT_FARMACIA, true);
+    xhr.setRequestHeader('Content-Type','text/plain');
+    xhr.send(JSON.stringify({ action:'guardarInforme', pdfData:pdfB64, filename, trazabilidad }));
+  });
+}
+
+// === LÓGICA SEMANAL (PDF + Hoja de cálculo) ===
+function verificarTareasSemanales() {
+  const ahora = Date.now();
+  const SEMANA_MS = 7 * 24 * 60 * 60 * 1000;
+
+  // PDF semanal
+  const ultimoPDF = parseInt(localStorage.getItem('farm_ultimo_pdf_semanal') || '0');
+  if (ahora - ultimoPDF >= SEMANA_MS) {
+    setTimeout(() => { generarPDFSemanal(); }, 5000); // Esperar 5s para que se carguen datos
+    localStorage.setItem('farm_ultimo_pdf_semanal', String(ahora));
+  }
+
+  // Hoja semanal
+  const ultimoSheet = parseInt(localStorage.getItem('farm_ultimo_sheet_semanal') || '0');
+  if (ahora - ultimoSheet >= SEMANA_MS) {
+    setTimeout(() => { guardarHojaSemanal(); }, 8000);
+    localStorage.setItem('farm_ultimo_sheet_semanal', String(ahora));
+  }
+}
+
+async function generarPDFSemanal() {
+  // Fetch última semana de cada canal
+  const desde7 = new Date(Date.now() - 7*24*60*60*1000).toISOString();
+  let filas = '';
+  for (const c of db) {
+    try {
+      const url = `https://api.thingspeak.com/channels/${c.id}/feeds.json?api_key=${c.k}&results=2016&start=${desde7}`;
+      const r = await fetch(url);
+      const d = await r.json();
+      if (!d.feeds || !d.channel) continue;
+      for (const f of (c.fields||[])) {
+        const lbl = d.channel[f] || f;
+        const vals = d.feeds.map(e => parseFloat(e[f])).filter(v => !isNaN(v));
+        if (!vals.length) continue;
+        const avg = (vals.reduce((a,b)=>a+b,0)/vals.length).toFixed(1);
+        const mn  = Math.min(...vals).toFixed(1);
+        const mx  = Math.max(...vals).toFixed(1);
+        const alertas = vals.filter(v => v<MIN||v>MAX).length;
+        filas += `<tr><td>${c.area||''}</td><td>${c.n}</td><td>${lbl}</td><td>${avg}°C</td><td>${mn}°C</td><td>${mx}°C</td><td>${alertas}</td></tr>`;
+      }
+    } catch(e){}
+  }
+
+  const trazabilidad = generarCodigoTrazabilidad('SEM-FARM');
+  const ahora = new Date().toLocaleString('es-AR');
+  const semana = `Semana ${new Date().toLocaleDateString('es-AR',{day:'2-digit',month:'2-digit'})}`;
+
+  const html = `<!DOCTYPE html><html><head><meta charset="UTF-8"><style>
+    body{margin:0;padding:0;font-family:'Segoe UI',sans-serif;color:#1e293b;}
+    h2{color:#00384d;margin:0 0 4px 0;font-size:16pt;}
+    p.sub{color:#64748b;margin:0 0 12px 0;font-size:9pt;}
+    hr{border:none;border-top:2px solid #00384d;margin-bottom:16px;}
+    table{width:100%;border-collapse:collapse;margin-bottom:16px;}
+    th,td{padding:7px;border:1px solid #e2e8f0;font-size:8pt;text-align:left;}
+    th{background:#f1f5f9;font-weight:bold;}
+    .footer{margin-top:20px;font-size:8pt;color:#64748b;border-top:1px solid #eee;padding-top:8px;}
+  </style></head><body>
+    <h2>Informe Semanal – Cadena de Frío Farmacia</h2>
+    <p class="sub">Sistema Vicus – Hospital Natalio Burd | ${semana} | Generado: ${ahora}</p><hr>
+    <table><thead><tr><th>Área</th><th>Canal</th><th>Sensor</th><th>Prom.</th><th>Mín.</th><th>Máx.</th><th>Alertas</th></tr></thead>
+    <tbody>${filas}</tbody></table>
+    <div class="footer">
+      <p>Rango admisible: +${MIN}°C a +${MAX}°C</p>
+      <p>Trazabilidad: <strong>${trazabilidad}</strong></p>
+      <p>Fecha de emisión: ${ahora}</p>
+      <p>Desarrollado por Ingeniero Perez Ramiro – Vicus</p>
+    </div></body></html>`;
+
+  const filename = `InformeSemanal_Farmacia_${trazabilidad}.pdf`;
+  const opt = { margin:12, filename, image:{type:'jpeg',quality:0.98}, html2canvas:{scale:2,useCORS:true}, jsPDF:{unit:'mm',format:'a4',orientation:'portrait'} };
+
+  html2pdf().set(opt).from(html,'string').outputPdf('datauristring').then(pdfB64 => {
+    const xhr = new XMLHttpRequest();
+    xhr.open('POST', APPS_SCRIPT_FARMACIA, true);
+    xhr.setRequestHeader('Content-Type','text/plain');
+    xhr.send(JSON.stringify({ action:'guardarPDFSemanal', pdfData:pdfB64, filename, trazabilidad }));
+  });
+}
+
+async function guardarHojaSemanal() {
+  const desde7 = new Date(Date.now() - 7*24*60*60*1000).toISOString();
+  const registros = [];
+  for (const c of db) {
+    try {
+      const url = `https://api.thingspeak.com/channels/${c.id}/feeds.json?api_key=${c.k}&results=2016&start=${desde7}`;
+      const r = await fetch(url);
+      const d = await r.json();
+      if (!d.feeds || !d.channel) continue;
+      for (const feed of d.feeds) {
+        for (const f of (c.fields||[])) {
+          const val = parseFloat(feed[f]);
+          if (isNaN(val)) continue;
+          registros.push({
+            fecha: feed.created_at,
+            area: c.area||'',
+            canal: c.n,
+            sensor: d.channel[f]||f,
+            temperatura: val,
+            estado: (val>=MIN&&val<=MAX)?'OK':'ALERTA'
+          });
+        }
+      }
+    } catch(e){}
+  }
+
+  const xhr = new XMLHttpRequest();
+  xhr.open('POST', APPS_SCRIPT_FARMACIA, true);
+  xhr.setRequestHeader('Content-Type','text/plain');
+  xhr.send(JSON.stringify({ action:'guardarHojaSemanal', registros }));
+}
 </script>
 </body>
-</html>
-
-
 
 
 
