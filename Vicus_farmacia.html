@@ -388,7 +388,7 @@ box-shadow: 0 2px 6px rgba(0,0,0,0.05);
 <script>
 const MAX = 8.0, MIN = 2.0;
 const WIFI_CUTOFF = 10;
-const APPS_SCRIPT_FARMACIA = 'https://script.google.com/macros/s/AKfycby3Le4QQbUuyDait1dGGVBIVaVCc1EVheFI0z_Kr9fUHjna1XX4bujHvV3gv9e1_evo4A/exec';
+const APPS_SCRIPT_FARMACIA = 'https://script.google.com/macros/s/AKfycbyIFjfyzyh88Z3gc0nTKR2uBZai4tXKPky3hAmmo83Zs96SZytl9AqTf-dvbedH9UEFyQ/exec';
 
 // ── Canales pre-cargados de fábrica ──────────────────────────────────────────
 const CANALES_DEFAULT = [
@@ -700,15 +700,11 @@ async function generarPDFSemanal() {
   const filename = `InformeSemanal_Farmacia_${trazabilidad}.pdf`;
   const opt = { margin:12, filename, image:{type:'jpeg',quality:0.98}, html2canvas:{scale:2,useCORS:true}, jsPDF:{unit:'mm',format:'a4',orientation:'portrait'} };
 
-  html2pdf().set(opt).from(html,'string').outputPdf('datauristring').then(async pdfB64 => {
-    try {
-      await fetch(APPS_SCRIPT_FARMACIA, {
-        method: 'POST',
-        mode: 'no-cors',
-        headers: { 'Content-Type': 'text/plain' },
-        body: JSON.stringify({ action:'guardarPDFSemanal', pdfData:pdfB64, filename, trazabilidad })
-      });
-    } catch(e) {}
+  html2pdf().set(opt).from(html,'string').outputPdf('datauristring').then(pdfB64 => {
+    const xhr = new XMLHttpRequest();
+    xhr.open('POST', APPS_SCRIPT_FARMACIA, true);
+    xhr.setRequestHeader('Content-Type','text/plain');
+    xhr.send(JSON.stringify({ action:'guardarPDFSemanal', pdfData:pdfB64, filename, trazabilidad }));
   });
 
 
@@ -744,14 +740,10 @@ async function guardarHojaSemanal() {
     } catch(e){}
   }
 
-  try {
-    await fetch(APPS_SCRIPT_FARMACIA, {
-      method: 'POST',
-      mode: 'no-cors',
-      headers: { 'Content-Type': 'text/plain' },
-      body: JSON.stringify({ action:'guardarHojaSemanal', registros })
-    });
-  } catch(e) {}
+  const xhr = new XMLHttpRequest();
+  xhr.open('POST', APPS_SCRIPT_FARMACIA, true);
+  xhr.setRequestHeader('Content-Type','text/plain');
+  xhr.send(JSON.stringify({ action:'guardarHojaSemanal', registros }));
 
 }
 
