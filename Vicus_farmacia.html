@@ -700,12 +700,22 @@ async function generarPDFSemanal() {
   const filename = `InformeSemanal_Farmacia_${trazabilidad}.pdf`;
   const opt = { margin:12, filename, image:{type:'jpeg',quality:0.98}, html2canvas:{scale:2,useCORS:true}, jsPDF:{unit:'mm',format:'a4',orientation:'portrait'} };
 
-  html2pdf().set(opt).from(html,'string').outputPdf('datauristring').then(pdfB64 => {
-    const xhr = new XMLHttpRequest();
-    xhr.open('POST', APPS_SCRIPT_FARMACIA, true);
-    xhr.setRequestHeader('Content-Type','text/plain');
-    xhr.send(JSON.stringify({ action:'guardarPDFSemanal', pdfData:pdfB64, filename, trazabilidad }));
+  html2pdf().set(opt).from(html,'string').outputPdf('datauristring').then(async pdfB64 => {
+    try {
+      await fetch(APPS_SCRIPT_FARMACIA, {
+        method: 'POST',
+        mode: 'no-cors',
+        headers: { 'Content-Type': 'text/plain' },
+        body: JSON.stringify({ action:'guardarPDFSemanal', pdfData:pdfB64, filename, trazabilidad })
+      });
+    } catch(e) {}
   });
+
+
+
+
+
+
 }
 
 async function guardarHojaSemanal() {
@@ -734,11 +744,19 @@ async function guardarHojaSemanal() {
     } catch(e){}
   }
 
-  const xhr = new XMLHttpRequest();
-  xhr.open('POST', APPS_SCRIPT_FARMACIA, true);
-  xhr.setRequestHeader('Content-Type','text/plain');
-  xhr.send(JSON.stringify({ action:'guardarHojaSemanal', registros }));
-}
+  try {
+    await fetch(APPS_SCRIPT_FARMACIA, {
+      method: 'POST',
+      mode: 'no-cors',
+      headers: { 'Content-Type': 'text/plain' },
+      body: JSON.stringify({ action:'guardarHojaSemanal', registros })
+    });
+  } catch(e) {}
+
+
+
+
+
 </script>
 </body>
 
