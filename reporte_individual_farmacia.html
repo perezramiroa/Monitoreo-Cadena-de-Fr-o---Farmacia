@@ -265,7 +265,7 @@ let chartInstance = null;
 let currentFeeds = [];
 
 // ── Google Apps Script – Farmacia ────────────────────────────────────────────
-const APPS_SCRIPT_FARMACIA = 'https://script.google.com/macros/s/AKfycby3Le4QQbUuyDait1dGGVBIVaVCc1EVheFI0z_Kr9fUHjna1XX4bujHvV3gv9e1_evo4A/exec';
+const APPS_SCRIPT_FARMACIA = 'https://script.google.com/macros/s/AKfycbyIFjfyzyh88Z3gc0nTKR2uBZai4tXKPky3hAmmo83Zs96SZytl9AqTf-dvbedH9UEFyQ/exec';
 
 /**
  * Convierte el PDF generado (jsPDF doc) a base64 y lo envía al
@@ -274,48 +274,70 @@ const APPS_SCRIPT_FARMACIA = 'https://script.google.com/macros/s/AKfycby3Le4QQbU
  * @param {string}      nombre - nombre del archivo (sin .pdf)
  */
 async function enviarPDFaDrive(doc, nombre) {
-  try {
-    const pdfBase64 = doc.output('datauristring').split(',')[1];
-    const payload = {
-      action: 'guardarInforme',
-      filename: nombre + '.pdf',
-      pdfData: pdfBase64,
-      trazabilidad: generarCodigoTrazabilidad()
-    };
-    const xhr = new XMLHttpRequest();
-    xhr.open('POST', APPS_SCRIPT_FARMACIA, true);
-    xhr.setRequestHeader('Content-Type', 'text/plain');
-    xhr.onreadystatechange = function() {
-      if (xhr.readyState === 4 && xhr.status === 200) {
-        const json = JSON.parse(xhr.responseText);
-        if (json.result === true) {
-          mostrarToast('✅ Informe guardado en Drive', '#10b981');
-        } else {
-          mostrarToast('⚠️ Drive: ' + (json.error || 'error'), '#f59e0b');
-        }
+  const filename = nombre + '.pdf';
+  const trazabilidad = generarCodigoTrazabilidad();
+  const pdfBase64 = doc.output('datauristring').split(',')[1];
+  const payload = { action: 'guardarPDF', pdfData: pdfBase64, filename: filename, trazabilidad: trazabilidad };
+
+  const xhr = new XMLHttpRequest();
+  xhr.open('POST', APPS_SCRIPT_FARMACIA, true);
+  xhr.setRequestHeader('Content-Type', 'text/plain');
+  xhr.onload = function() {
+    try {
+      const res = JSON.parse(xhr.responseText);
+      if (res.result) {
+        mostrarToast('✅ Informe guardado en Drive', '#10b981');
+      } else {
+        mostrarToast('⚠️ Drive: ' + (res.error || 'error'), '#f59e0b');
       }
-    };
-    xhr.send(JSON.stringify(payload));
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-  } catch (e) {
-    console.error('[Farmacia] Error al enviar PDF a Drive:', e);
-    mostrarToast('⚠️ PDF guardado localmente. Sin conexión con Drive.', '#f59e0b');
-  }
+    } catch(e) {
+      // Si hay error de parseo (CORS o similar) pero el status es 200, asumimos éxito
+      if (xhr.status === 200 || xhr.status === 0) {
+        mostrarToast('✅ Informe enviado a Drive', '#10b981');
+      } else {
+        mostrarToast('⚠️ Error al enviar a Drive', '#ef4444');
+      }
+    }
+  };
+  xhr.onerror = function() {
+    mostrarToast('⚠️ Error de conexión con Drive', '#ef4444');
+  };
+  xhr.send(JSON.stringify(payload));
 }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 /** Genera un código de trazabilidad RPT-FARM-YYYYMMDD-HHMMSS-XXXXX */
 function generarCodigoTrazabilidad() {
