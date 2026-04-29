@@ -273,9 +273,8 @@ const APPS_SCRIPT_FARMACIA = 'https://script.google.com/macros/s/AKfycbyIFjfyzyh
  * @param {jspdf.jsPDF} doc  - instancia jsPDF ya construida
  * @param {string}      nombre - nombre del archivo (sin .pdf)
  */
-async function enviarPDFaDrive(doc, nombre) {
-  const filename = nombre + '.pdf';
-  const trazabilidad = generarCodigoTrazabilidad();
+async function enviarPDFaDrive(doc, nombre, trazabilidad) {
+  const filename = `${nombre}_${trazabilidad}.pdf`;
   const pdfBase64 = doc.output('datauristring').split(',')[1];
   const payload = { action: 'guardarPDF', pdfData: pdfBase64, filename: filename, trazabilidad: trazabilidad };
 
@@ -345,7 +344,7 @@ function generarCodigoTrazabilidad() {
   const pad = n => String(n).padStart(2, '0');
   const fecha = `${now.getFullYear()}${pad(now.getMonth()+1)}${pad(now.getDate())}`;
   const hora  = `${pad(now.getHours())}${pad(now.getMinutes())}${pad(now.getSeconds())}`;
-  const rand  = Math.floor(10000 + Math.random() * 90000);
+  const rand  = Math.random().toString(36).toUpperCase().slice(2, 7);
   return `RPT-FARM-${fecha}-${hora}-${rand}`;
 }
 
@@ -380,6 +379,7 @@ return text.replace(/[\u{1F600}-\u{1F64F}\u{1F300}-\u{1F5FF}\u{1F680}-\u{1F6FF}\
 }
 async function downloadPDF() {
 try {
+const trazabilidad = generarCodigoTrazabilidad();
 const { jsPDF } = window.jspdf;
 const doc = new jsPDF('p', 'mm', 'a4');
 const pageWidth = doc.internal.pageSize.getWidth();
@@ -453,9 +453,9 @@ doc.text(`Ubicacion/Equipo: ${teamName}`, margin, yPos);
 yPos += 10;
 doc.setFontSize(9);
 doc.text(cleanTextForPDF(document.getElementById('reportId').innerText), margin, yPos);
-doc.text("Vigencia: 30 dias", margin + 60, yPos);
+doc.text(`Trazabilidad: ${trazabilidad}`, margin + 60, yPos);
 doc.text(`Emision: ${document.getElementById('issueDate').innerText}`, margin + 110, yPos);
-yPos += 15;
+yPos += 12;
 
 const canvas = document.getElementById('chart');
 if (canvas) {
@@ -553,7 +553,7 @@ yPos += 8;
     // 1) Descarga local
     doc.save(pdfFileName + '.pdf');
     // 2) Envío automático a Google Drive
-    enviarPDFaDrive(doc, pdfFileName);
+    enviarPDFaDrive(doc, pdfFileName, trazabilidad);
   } catch (err) {
     console.error(err);
     alert("Error al generar el PDF.");
