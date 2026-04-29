@@ -145,6 +145,28 @@ h1, h2, h3 {
 margin: 0 0 16px 0;
 color: var(--fg);
 }
+.analisis-section {
+    margin-top: 15px; 
+    padding: 15px; 
+    background: #f8fafc; 
+    border-left: 4px solid #3b82f6; 
+    border-radius: 8px;
+    font-size: 0.9rem;
+}
+.recomendaciones-section {
+    margin-top: 10px; 
+    padding: 15px; 
+    background: #f0f9ff; 
+    border-left: 4px solid #0ea5e9; 
+    border-radius: 8px;
+    font-size: 0.9rem;
+}
+.analisis-section strong, .recomendaciones-section strong {
+    display: block;
+    margin-bottom: 5px;
+    color: #1e293b;
+}
+
 h1 {
 font-size: 1.8rem;
 display: flex;
@@ -307,6 +329,14 @@ color: #1e293b;
 <tbody></tbody>
 </table>
 </div>
+<div id="analisisAlertas" class="analisis-section" style="display:none;">
+    <strong>ANÁLISIS DE ALERTAS:</strong>
+    <div id="analisisAlertasContenido"></div>
+</div>
+<div id="recomendacionesAlertas" class="recomendaciones-section" style="display:none;">
+    <strong>RECOMENDACIONES:</strong>
+    <div id="recomendacionesAlertasContenido"></div>
+</div>
 </div>
 <div class="section">
 <h2>📡 Eventos detectados (>10 min sin datos)</h2>
@@ -316,6 +346,14 @@ color: #1e293b;
 </thead>
 <tbody></tbody>
 </table>
+<div id="analisisWifi" class="analisis-section" style="display:none;">
+    <strong>ANÁLISIS DE CONECTIVIDAD:</strong>
+    <div id="analisisWifiContenido"></div>
+</div>
+<div id="recomendacionesWifi" class="recomendaciones-section" style="display:none;">
+    <strong>RECOMENDACIONES DE CONECTIVIDAD:</strong>
+    <div id="recomendacionesWifiContenido"></div>
+</div>
 </div>
 </div>
 </div>
@@ -765,35 +803,76 @@ const tbody = document.querySelector('#alertTable tbody');
 let lastState = 'normal';
 let startTime = null;
 let rows = '';
+let alertData = [];
+
 feeds.forEach(f => {
-const val = parseFloat(f[field]);
-if (isNaN(val)) return;
-const state = (val > MAX) ? 'high' : (val < MIN) ? 'low' : 'normal';
-if (state !== lastState) {
-if (state !== 'normal') {
-startTime = f.created_at;
-const label = state === 'high' ? '🔥 Alta (riesgo de pérdida)' : '❄️ Baja (riesgo de congelación)';
-rows += `<tr class="row-alert"><td>${formatDateTime(f.created_at)}</td><td>${val.toFixed(1)}</td><td>${label}</td><td>--</td></tr>`;
-} else if (startTime) {
-const dur = (new Date(f.created_at) - new Date(startTime)) / 60000;
-rows += `<tr><td>${formatDateTime(f.created_at)}</td><td>${val.toFixed(1)}</td><td>✅ Recuperación</td><td>${formatDurationFull(dur)}</td></tr>`;
-}
-lastState = state;
-}
+    const val = parseFloat(f[field]);
+    if (isNaN(val)) return;
+    const state = (val > MAX) ? 'high' : (val < MIN) ? 'low' : 'normal';
+    if (state !== lastState) {
+        if (state !== 'normal') {
+            startTime = f.created_at;
+            const label = state === 'high' ? '🔥 Alta (riesgo de pérdida)' : '❄️ Baja (riesgo de congelación)';
+            rows += `<tr class="row-alert"><td>${formatDateTime(f.created_at)}</td><td>${val.toFixed(1)}</td><td>${label}</td><td>--</td></tr>`;
+        } else if (startTime) {
+            const dur = (new Date(f.created_at) - new Date(startTime)) / 60000;
+            rows += `<tr><td>${formatDateTime(f.created_at)}</td><td>${val.toFixed(1)}</td><td>✅ Recuperación</td><td>${formatDurationFull(dur)}</td></tr>`;
+            alertData.push({ estado: lastState, duracion: dur });
+        }
+        lastState = state;
+    }
 });
 tbody.innerHTML = rows || '<tr><td colspan="4" class="empty">✅ Sin eventos fuera de rango.</td></tr>';
+
+// Llenar boxes de análisis
+const analisisCont = document.getElementById('analisisAlertasContenido');
+const recomCont = document.getElementById('recomendacionesAlertasContenido');
+const analisisBox = document.getElementById('analisisAlertas');
+const recomBox = document.getElementById('recomendacionesAlertas');
+
+if (alertData.length > 0) {
+    analisisCont.innerText = generarAnalisisAlertas(alertData);
+    recomCont.innerText = generarRecomendacionesAlertas(alertData);
+    analisisBox.style.display = 'block';
+    recomBox.style.display = 'block';
+} else {
+    analisisCont.innerText = "No se registraron desvíos de temperatura en el período analizado. El equipo se mantuvo dentro del rango óptimo (2°C - 8°C).";
+    recomCont.innerText = "• Continuar con el monitoreo habitual.\n• Mantener registro actualizado de temperaturas.\n• Realizar mantenimiento preventivo según calendario.";
+    analisisBox.style.display = 'block';
+    recomBox.style.display = 'block';
+}
 }
 function fillWifi(feeds, field) {
 const tbody = document.querySelector('#wifiTable tbody');
 let rows = '';
+let wifiData = [];
 for (let i = 1; i < feeds.length; i++) {
-const diff = (new Date(feeds[i].created_at) - new Date(feeds[i-1].created_at)) / 60000;
-if (diff > WIFI_CUTOFF) {
-const type = parseFloat(feeds[i][field]) > MAX || parseFloat(feeds[i][field]) < MIN ? '⚡ Corte de Energía' : '📶 Corte de WiFi';
-rows += `<tr><td>${formatDateTime(feeds[i-1].created_at)}</td><td>${formatDateTime(feeds[i].created_at)}</td><td>${type}</td><td>${feeds[i-1][field]}°C</td><td>${feeds[i][field]}°C</td><td>${formatDurationFull(diff)}</td></tr>`;
-}
+    const diff = (new Date(feeds[i].created_at) - new Date(feeds[i-1].created_at)) / 60000;
+    if (diff > WIFI_CUTOFF) {
+        const type = parseFloat(feeds[i][field]) > MAX || parseFloat(feeds[i][field]) < MIN ? '⚡ Corte de Energía' : '📶 Corte de WiFi';
+        rows += `<tr><td>${formatDateTime(feeds[i-1].created_at)}</td><td>${formatDateTime(feeds[i].created_at)}</td><td>${type}</td><td>${feeds[i-1][field]}°C</td><td>${feeds[i][field]}°C</td><td>${formatDurationFull(diff)}</td></tr>`;
+        wifiData.push({ tipo: type, duracion: diff });
+    }
 }
 tbody.innerHTML = rows || '<tr><td colspan="6" class="empty">✅ Sin interrupciones >10 min.</td></tr>';
+
+// Llenar boxes de análisis de conectividad
+const analisisWifiCont = document.getElementById('analisisWifiContenido');
+const recomWifiCont = document.getElementById('recomendacionesWifiContenido');
+const analisisWifiBox = document.getElementById('analisisWifi');
+const recomWifiBox = document.getElementById('recomendacionesWifi');
+
+if (wifiData.length > 0) {
+    analisisWifiCont.innerText = generarAnalisisEventos(wifiData);
+    recomWifiCont.innerText = generarRecomendacionesEventos(wifiData);
+    analisisWifiBox.style.display = 'block';
+    recomWifiBox.style.display = 'block';
+} else {
+    analisisWifiCont.innerText = "No se detectaron interrupciones de conectividad significativas.";
+    recomWifiCont.innerText = "• Verificar el estado del router y la conexión a internet.\n• Revisar la distancia entre el sensor y el punto de acceso WiFi.\n• Mantener actualizado el firmware del sensor.";
+    analisisWifiBox.style.display = 'block';
+    recomWifiBox.style.display = 'block';
+}
 }
 function formatDate(iso) {
 const d = new Date(iso);
