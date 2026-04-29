@@ -298,7 +298,6 @@ box-shadow: 0 2px 6px rgba(0,0,0,0.05);
 <button class="btn-add" onclick="add()">Agregar</button>
 <button class="btn-clear" onclick="wipe()">Borrar Todo</button>
 <button class="btn-clear" onclick="toggleNormativa()">Normativa</button>
-<button class="btn-clear" style="background:#00384d;" onclick="generarInformeTecnico()">📄 Informe Técnico PDF</button>
 </div>
 <h1 class="page-title">Monitoreo de Cadena de Frío para Medicamentos Refrigerados - Farmacia</h1>
 <div id="app" class="device-list"></div>
@@ -628,72 +627,6 @@ function generarCodigoTrazabilidad(prefijo) {
   const hora  = now.toTimeString().slice(0,8).replace(/:/g,'');
   const rand  = Math.random().toString(36).toUpperCase().slice(2,7);
   return `${prefijo}-${fecha}-${hora}-${rand}`;
-}
-
-// === INFORME TÉCNICO PDF (botón manual) ===
-function generarInformeTecnico() {
-  // Recolectar datos actuales
-  const sensores = db.map(c => {
-    const datos = [];
-    (c.fields || []).forEach(f => {
-      const val = document.getElementById(`v-${c.id}-${f}`);
-      const lbl = document.getElementById(`l-${c.id}-${f}`);
-      datos.push({
-        sensor: lbl ? lbl.innerText : f,
-        valor:  val  ? val.innerText  : '--'
-      });
-    });
-    return { nombre: c.n, area: c.area || '', datos };
-  });
-
-  const trazabilidad = generarCodigoTrazabilidad('RPT-FARM');
-  const ahora = new Date().toLocaleString('es-AR');
-
-  let filas = '';
-  sensores.forEach(s => {
-    s.datos.forEach(d => {
-      const val = parseFloat(d.valor);
-      const estado = isNaN(val) ? '—' : (val >= MIN && val <= MAX ? '✅ OK' : '⚠️ ALERTA');
-      filas += `<tr><td>${s.area}</td><td>${s.nombre}</td><td>${d.sensor}</td><td style="font-size:1.2em;font-weight:700">${d.valor}°C</td><td>${estado}</td></tr>`;
-    });
-  });
-
-  const html = `<!DOCTYPE html><html><head><meta charset="UTF-8"><style>
-    body{margin:0;padding:0;font-family:'Segoe UI',sans-serif;color:#1e293b;}
-    h2{color:#00384d;margin:0 0 4px 0;font-size:16pt;}
-    p.sub{color:#64748b;margin:0 0 12px 0;font-size:9pt;}
-    hr{border:none;border-top:2px solid #00384d;margin-bottom:16px;}
-    table{width:100%;border-collapse:collapse;margin-bottom:16px;}
-    th,td{padding:8px;border:1px solid #e2e8f0;font-size:9pt;text-align:left;}
-    th{background:#f1f5f9;font-weight:bold;}
-    .footer{margin-top:20px;font-size:8pt;color:#64748b;border-top:1px solid #eee;padding-top:8px;}
-  </style></head><body>
-    <h2>Informe Técnico – Cadena de Frío Farmacia</h2>
-    <p class="sub">Sistema Vicus – Hospital Natalio Burd | Generado: ${ahora}</p><hr>
-    <table><thead><tr><th>Área</th><th>Canal</th><th>Sensor</th><th>Temperatura</th><th>Estado</th></tr></thead>
-    <tbody>${filas}</tbody></table>
-    <div class="footer">
-      <p>Rango admisible: +${MIN}°C a +${MAX}°C</p>
-      <p>Trazabilidad: <strong>${trazabilidad}</strong></p>
-      <p>Fecha de emisión: ${ahora}</p>
-      <p>Desarrollado por Ingeniero Perez Ramiro – Vicus</p>
-    </div></body></html>`;
-
-  const filename = `InformeFarmacia_${trazabilidad}.pdf`;
-  const opt = { margin:12, filename, image:{type:'jpeg',quality:0.98}, html2canvas:{scale:2,useCORS:true}, jsPDF:{unit:'mm',format:'a4',orientation:'portrait'} };
-
-  html2pdf().set(opt).from(html,'string').outputPdf('datauristring').then(pdfB64 => {
-    // Descarga local
-    const link = document.createElement('a');
-    link.href = pdfB64;
-    link.download = filename;
-    link.click();
-    // Guardar en Drive (carpeta Informes individuales)
-    const xhr = new XMLHttpRequest();
-    xhr.open('POST', APPS_SCRIPT_FARMACIA, true);
-    xhr.setRequestHeader('Content-Type','text/plain');
-    xhr.send(JSON.stringify({ action:'guardarInforme', pdfData:pdfB64, filename, trazabilidad }));
-  });
 }
 
 // === LÓGICA SEMANAL (PDF + Hoja de cálculo) ===
