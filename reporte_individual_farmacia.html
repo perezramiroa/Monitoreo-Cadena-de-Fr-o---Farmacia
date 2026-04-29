@@ -9,7 +9,80 @@
 <meta name="theme-color" content="#00384d">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 <link rel="stylesheet" href="./css/pwa-styles.css">
-<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js">
+// ============================================================
+// FUNCIONES DE ANÁLISIS Y RECOMENDACIONES (Vicus Farmacia)
+// ============================================================
+function generarAnalisisAlertas(eventos) {
+    if (!eventos || eventos.length === 0) {
+        return "No se registraron desvíos de temperatura en el período analizado. El equipo se mantuvo dentro del rango óptimo (2°C - 8°C).";
+    }
+    let totalDuracion = 0;
+    let alertasAltas = 0;
+    let alertasBajas = 0;
+    eventos.forEach(evento => {
+        const duracion = parseFloat(evento.duracion) || 0;
+        totalDuracion += duracion;
+        if (evento.estado.toLowerCase().includes('alta')) alertasAltas++;
+        else if (evento.estado.toLowerCase().includes('baja')) alertasBajas++;
+    });
+    let analisis = `Se detectaron ${eventos.length} evento(s) de temperatura fuera de rango.\n`;
+    analisis += `• Alertas por temperatura alta: ${alertasAltas}\n`;
+    analisis += `• Alertas por temperatura baja: ${alertasBajas}\n`;
+    analisis += `• Tiempo total acumulado fuera de rango: ${formatDurationFull(totalDuracion)}\n\n`;
+    if (totalDuracion < 30) {
+        analisis += "Los desvíos fueron breves y no representan un riesgo crítico para la cadena de frío. Se recomienda monitorear de cerca las próximas horas.";
+    } else if (totalDuracion < 120) {
+        analisis += "Se registraron desvíos de moderada duración. Es posible que algunos medicamentos hayan sido afectados. Se requiere revisión de protocolos.";
+    } else {
+        analisis += "Los desvíos fueron prolongados y representan un riesgo significativo. Se requiere evaluación técnica inmediata y posible descarte de medicamentos afectados.";
+    }
+    return analisis;
+}
+
+function generarRecomendacionesAlertas(eventos) {
+    if (!eventos || eventos.length === 0) {
+        return "• Continuar con el monitoreo habitual.\n• Mantener registro actualizado de temperaturas.\n• Realizar mantenimiento preventivo según calendario.";
+    }
+    let recomendaciones = [
+        "• Verificar el cierre hermético de puertas y burletes de los equipos.",
+        "• Controlar la calibración del sensor de temperatura contra un termómetro patrón.",
+        "• Documentar todas las aperturas programadas del equipo en el período afectado.",
+        "• Evaluar la necesidad de respaldo eléctrico (grupo electrógeno o UPS).",
+        "• Aplicar protocolo establecido ante corte prolongado de energía."
+    ];
+    const tieneAltas = eventos.some(e => e.estado.toLowerCase().includes('alta'));
+    const tieneBajas = eventos.some(e => e.estado.toLowerCase().includes('baja'));
+    if (tieneAltas) recomendaciones.push("• Dado que se detectaron temperaturas ALTAS: verificar el sistema de refrigeración.");
+    if (tieneBajas) recomendaciones.push("• Dado que se detectaron temperaturas BAJAS: revisar la configuración del termostato.");
+    return recomendaciones.join('\n');
+}
+
+function generarAnalisisEventos(eventos) {
+    if (!eventos || eventos.length === 0) return "No se detectaron interrupciones de conectividad significativas.";
+    let totalDuracion = 0;
+    eventos.forEach(e => { totalDuracion += parseFloat(e.duracion) || 0; });
+    let analisis = `Se detectaron ${eventos.length} interrupciones de datos.\n`;
+    analisis += `• Tiempo total sin datos: ${formatDurationFull(totalDuracion)}\n\n`;
+    if (totalDuracion < 60) analisis += "Los cortes fueron breves y no afectaron significativamente el registro.";
+    else analisis += "Los cortes fueron prolongados. Se recomienda revisar la conectividad WiFi.";
+    return analisis;
+}
+
+function generarRecomendacionesEventos(eventos) {
+    return "• Verificar el estado del router y la conexión a internet.\n• Revisar la distancia entre el sensor y el punto de acceso WiFi.\n• Mantener actualizado el firmware del sensor.";
+}
+
+function checkPageBreak(doc, yPos, espacioNecesario, marginTop = 45, marginBottom = 30) {
+    const pageHeight = doc.internal.pageSize.getHeight();
+    if (yPos + espacioNecesario > pageHeight - marginBottom) {
+        doc.addPage();
+        return marginTop;
+    }
+    return yPos;
+}
+
+</script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.25/jspdf.plugin.autotable.min.js"></script>
 <style>
@@ -453,9 +526,11 @@ doc.text(`Ubicacion/Equipo: ${teamName}`, margin, yPos);
 yPos += 10;
 doc.setFontSize(9);
 doc.text(cleanTextForPDF(document.getElementById('reportId').innerText), margin, yPos);
-doc.text(`Trazabilidad: ${trazabilidad}`, margin + 60, yPos);
-doc.text(`Emision: ${document.getElementById('issueDate').innerText}`, margin + 110, yPos);
-yPos += 12;
+doc.text(`Emision: ${document.getElementById('issueDate').innerText}`, pageWidth - margin, yPos, { align: 'right' });
+yPos += 6;
+doc.setFontSize(8);
+doc.text(`Trazabilidad: ${trazabilidad}`, margin, yPos);
+yPos += 10;
 
 const canvas = document.getElementById('chart');
 if (canvas) {
@@ -501,6 +576,36 @@ data.cell.styles.textColor = alertStyles[data.row.index].textColor;
 }
 });
 yPos = doc.lastAutoTable.finalY + 10;
+
+// Análisis y Recomendaciones de Alertas
+yPos = checkPageBreak(doc, yPos, 40);
+doc.setFontSize(11);
+doc.setFont('helvetica', 'bold');
+doc.setTextColor(0, 56, 77);
+doc.text('ANALISIS TECNICO:', margin, yPos);
+yPos += 7;
+doc.setFont('helvetica', 'normal');
+doc.setFontSize(9);
+doc.setTextColor(30, 41, 59);
+const analisisAlertas = generarAnalisisAlertas(alertRows.map(r => ({ estado: r[2], duracion: r[3] })));
+const splitAnalisis = doc.splitTextToSize(analisisAlertas, pageWidth - (margin * 2));
+doc.text(splitAnalisis, margin, yPos);
+yPos += (splitAnalisis.length * 5) + 5;
+
+yPos = checkPageBreak(doc, yPos, 40);
+doc.setFontSize(11);
+doc.setFont('helvetica', 'bold');
+doc.setTextColor(0, 56, 77);
+doc.text('RECOMENDACIONES:', margin, yPos);
+yPos += 7;
+doc.setFont('helvetica', 'normal');
+doc.setFontSize(9);
+doc.setTextColor(30, 41, 59);
+const recomAlertas = generarRecomendacionesAlertas(alertRows.map(r => ({ estado: r[2], duracion: r[3] })));
+const splitRecom = doc.splitTextToSize(recomAlertas, pageWidth - (margin * 2));
+doc.text(splitRecom, margin, yPos);
+yPos += (splitRecom.length * 5) + 10;
+
 } else {
 doc.setFont('helvetica', 'normal');
 doc.setTextColor(16, 185, 129);
