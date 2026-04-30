@@ -1,28 +1,18 @@
 const CACHE_NAME = 'rsamio-v1.0.0';
+const PREFIX = '/Monitoreo-Cadena-de-Fr-o---Farmacia';
 const urlsToCache = [
-  '/',
-  '/index.html',
-  '/rsamio_farmacia.html',
-  '/rsamio_hemoterapia.html',
-  '/rsamio_vacunas.html',
-  '/rsamio_inmunizacion_zona1.html',
-  '/rsamio_laboratorio_final.html',
-  '/normativa_farmacia.html',
-  '/normativa_hemoterapia.html',
-  '/normativa_inmunizacion.html',
-  '/normativa_inmunizacion_zona1.html',
-  '/normativa_laboratorio_final.html',
-  '/reporte_individual_farmacia.html',
-  '/reporte_individual_hemoterapia.html',
-  '/reporte_individual_vacunas.html',
-  '/reporte_individual_inmunizacion_zona1.html',
-  '/reporte_individual_laboratorio_final.html',
-  '/css/pwa-styles.css',
-  '/js/pwa-utils.js',
-  '/logos/logo_hnb_oscuro.jpg',
-  '/logos/logo_rih.jpg',
-  '/logos/logo_hnb_blanco.jpg',
-  '/logos/footer.jpg'
+  `${PREFIX}/`,
+  `${PREFIX}/index.html`,
+  `${PREFIX}/Vicus_farmacia.html`,
+  // Si existen otras páginas del proyecto, añádelas con el mismo prefijo, por ejemplo:
+  // `${PREFIX}/Vicus_hemoterapia.html`,
+  // `${PREFIX}/Vicus_vacunas.html`,
+  `${PREFIX}/css/pwa-styles.css`,
+  `${PREFIX}/js/pwa-utils.js`,
+  `${PREFIX}/logos/logo_hnb_oscuro.jpg`,
+  `${PREFIX}/logos/logo_rih.jpg`,
+  `${PREFIX}/logos/logo_hnb_blanco.jpg`,
+  `${PREFIX}/logos/footer.jpg`
 ];
 
 // Instalación del Service Worker
@@ -65,13 +55,13 @@ self.addEventListener('fetch', event => {
         if (response) {
           return response;
         }
-        
+
         // Si no está en cache, hacer la petición real
         return fetch(event.request)
           .then(response => {
             // Clonar la respuesta para guardar en cache
             const responseClone = response.clone();
-            
+
             // Solo cachear si es exitoso y es GET
             if (response.status === 200 && event.request.method === 'GET') {
               caches.open(CACHE_NAME)
@@ -79,13 +69,13 @@ self.addEventListener('fetch', event => {
                   cache.put(event.request, responseClone);
                 });
             }
-            
+
             return response;
           })
           .catch(() => {
             // Si falla la conexión, devolver página offline
             if (event.request.url.includes('.html')) {
-              return caches.match('/index.html');
+              return caches.match(`${PREFIX}/index.html`);
             }
           });
       })
