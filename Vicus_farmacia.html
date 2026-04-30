@@ -633,17 +633,41 @@ function generarCodigoTrazabilidad(prefijo) {
 function verificarTareasSemanales() {
   const ahora = Date.now();
   const SEMANA_MS = 7 * 24 * 60 * 60 * 1000;
+  
+  // Fecha ancla: 1 de mayo de 2026 a las 00:00:00 hora local
+  // (El mes 4 en JavaScript corresponde a mayo)
+  const fechaInicio = new Date(2026, 4, 1, 0, 0, 0).getTime();
+
+  // Función interna para determinar si se debe disparar la tarea
+  const debeDispararse = (ultimoGuardado) => {
+    // Si nunca se ejecutó, se dispara por primera vez inmediatamente.
+    if (ultimoGuardado === 0) return true;
+    
+    if (ahora >= fechaInicio) {
+      // Calculamos la semana actual y la semana del último guardado
+      // respecto a la fecha ancla (1/5/2026).
+      const semanaActual = Math.floor((ahora - fechaInicio) / SEMANA_MS);
+      const semanaUltima = (ultimoGuardado >= fechaInicio) 
+                           ? Math.floor((ultimoGuardado - fechaInicio) / SEMANA_MS) 
+                           : -1;
+      
+      // Si la semana actual es mayor a la última guardada, debe dispararse.
+      return semanaActual > semanaUltima;
+    }
+    
+    return false; // Aún no es el 1/5/2026 y ya se hizo el disparo inicial
+  };
 
   // PDF semanal
   const ultimoPDF = parseInt(localStorage.getItem('farm_ultimo_pdf_semanal') || '0');
-  if (ahora - ultimoPDF >= SEMANA_MS) {
+  if (debeDispararse(ultimoPDF)) {
     setTimeout(() => { generarPDFSemanal(); }, 5000); // Esperar 5s para que se carguen datos
     localStorage.setItem('farm_ultimo_pdf_semanal', String(ahora));
   }
 
   // Hoja semanal
   const ultimoSheet = parseInt(localStorage.getItem('farm_ultimo_sheet_semanal') || '0');
-  if (ahora - ultimoSheet >= SEMANA_MS) {
+  if (debeDispararse(ultimoSheet)) {
     setTimeout(() => { guardarHojaSemanal(); }, 8000);
     localStorage.setItem('farm_ultimo_sheet_semanal', String(ahora));
   }
@@ -651,7 +675,9 @@ function verificarTareasSemanales() {
 
 async function generarPDFSemanal() {
   // Fetch última semana de cada canal
-  const desde7 = new Date(Date.now() - 7*24*60*60*1000).toISOString();
+  const d7 = new Date(); d7.setHours(0,0,0,0); d7.setDate(d7.getDate() - 7);
+  const pad = n => String(n).padStart(2, '0');
+  const desde7 = `${d7.getFullYear()}-${pad(d7.getMonth()+1)}-${pad(d7.getDate())}T00:00:00-03:00`;
   let filas = '';
   for (const c of db) {
     try {
@@ -715,7 +741,9 @@ async function generarPDFSemanal() {
 }
 
 async function guardarHojaSemanal() {
-  const desde7 = new Date(Date.now() - 7*24*60*60*1000).toISOString();
+  const d7 = new Date(); d7.setHours(0,0,0,0); d7.setDate(d7.getDate() - 7);
+  const pad = n => String(n).padStart(2, '0');
+  const desde7 = `${d7.getFullYear()}-${pad(d7.getMonth()+1)}-${pad(d7.getDate())}T00:00:00-03:00`;
   const registros = [];
   for (const c of db) {
     try {
