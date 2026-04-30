@@ -78,6 +78,7 @@ color: var(--fg);
     border-left: 4px solid #3b82f6; 
     border-radius: 8px;
     font-size: 0.9rem;
+    white-space: pre-wrap;
 }
 .recomendaciones-section {
     margin-top: 10px; 
@@ -86,6 +87,7 @@ color: var(--fg);
     border-left: 4px solid #0ea5e9; 
     border-radius: 8px;
     font-size: 0.9rem;
+    white-space: pre-wrap;
 }
 .analisis-section strong, .recomendaciones-section strong {
     display: block;
@@ -144,6 +146,39 @@ color: white;
 }
 #downloadBtn:hover { background: #059669; }
 #backBtn:hover { background: #475569; }
+.range-group {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+    padding: 8px 12px;
+    background: #f1f5f9;
+    border-radius: 8px;
+    border: 1px solid #cbd5e1;
+}
+.range-group label {
+    font-weight: 600;
+    font-size: 0.85rem;
+    color: #475569;
+}
+.range-group input[type="date"] {
+    padding: 4px 8px;
+    border: 1px solid #cbd5e1;
+    border-radius: 6px;
+    font-size: 0.85rem;
+}
+#rangeBtn {
+    padding: 6px 14px;
+    background: #3b82f6;
+    color: white;
+    border: none;
+    border-radius: 6px;
+    cursor: pointer;
+    font-weight: 600;
+    transition: background 0.2s;
+}
+#rangeBtn:hover { background: #2563eb; }
+
 .chart-container {
 height: 360px;
 margin: 20px 0;
@@ -236,13 +271,27 @@ color: #1e293b;
 <span class="tag" id="teamName">Equipo</span>
 </h1>
 <div class="controls" id="daySelector">
-<button class="btn-day" data-days="1">1 día</button>
-<button class="btn-day" data-days="3">3 días</button>
-<button class="btn-day" data-days="7">7 días</button>
-<label for="datePicker" style="margin:0 8px;font-weight:600;">Fecha:</label>
-<input type="date" id="datePicker" />
-<button id="downloadBtn" onclick="downloadPDF()">📥 Generar informe oficial (PDF)</button>
-<button id="backBtn" onclick="window.close()">← Volver al listado</button>
+    <button class="btn-day" data-days="1">1 día</button>
+    <button class="btn-day" data-days="3">3 días</button>
+    <button class="btn-day" data-days="7">7 días</button>
+    
+    <div style="display: flex; align-items: center; gap: 8px; margin: 0 10px;">
+        <label for="datePicker" style="font-weight:600;">Un día:</label>
+        <input type="date" id="datePicker" />
+    </div>
+
+    <div class="range-group">
+        <label>Rango:</label>
+        <input type="date" id="dateStart" />
+        <label>al</label>
+        <input type="date" id="dateEnd" />
+        <button id="rangeBtn" onclick="applyRange()">Buscar</button>
+    </div>
+
+    <div style="margin-left: auto; display: flex; gap: 10px;">
+        <button id="downloadBtn" onclick="downloadPDF()">📥 PDF</button>
+        <button id="backBtn" onclick="window.close()">← Volver</button>
+    </div>
 </div>
 <div class="chart-container">
 <canvas id="chart"></canvas>
@@ -257,7 +306,7 @@ color: #1e293b;
 </table>
 </div>
 <div id="analisisAlertas" class="analisis-section" style="display:none;">
-    <strong>ANÁLISIS DE ALERTAS:</strong>
+    <strong>ANÁLISIS TÉCNICO:</strong>
     <div id="analisisAlertasContenido"></div>
 </div>
 <div id="recomendacionesAlertas" class="recomendaciones-section" style="display:none;">
@@ -274,7 +323,7 @@ color: #1e293b;
 <tbody></tbody>
 </table>
 <div id="analisisWifi" class="analisis-section" style="display:none;">
-    <strong>ANÁLISIS DE CONECTIVIDAD:</strong>
+    <strong>ANÁLISIS TÉCNICO:</strong>
     <div id="analisisWifiContenido"></div>
 </div>
 <div id="recomendacionesWifi" class="recomendaciones-section" style="display:none;">
@@ -297,18 +346,21 @@ const FIELD = params.get('field') || 'field1';
 const TYPE = params.get('type') || 'farmacia';
 let DAYS = parseInt(params.get('days')) || 7;
 let SELECTED_DATE = null;
+let CUSTOM_START = null;
+let CUSTOM_END = null;
 const MAX = 8.0, MIN = 2.0;
 const WIFI_CUTOFF = 10;
 let chartInstance = null;
 let currentFeeds = [];
-let observacionesAlmacenadas = {}; // Para persistir inputs en el PDF
+let observacionesAlmacenadas = JSON.parse(localStorage.getItem('vicus_obs_farmacia') || '{}');
 
 function guardarObservacion(input, id) {
     observacionesAlmacenadas[id] = input.value;
+    localStorage.setItem('vicus_obs_farmacia', JSON.stringify(observacionesAlmacenadas));
 }
 
 // ── Google Apps Script – Farmacia ────────────────────────────────────────────
-const APPS_SCRIPT_FARMACIA = 'https://script.google.com/macros/s/AKfycbwwHKXgAWqByt9hFIpJyIeV7Q5HISAalgSRBjHtz2ld3k7nISfUO5ykA4TduAD6IaZ_VA/exec';
+const APPS_SCRIPT_FARMACIA = 'https://script.google.com/macros/s/AKfycbwJFxVZEo-914qsK9wGA4BTChibw8ajy9ONem_YRlPpaBun262cPPk_MHGq-Ti1Jg7rzA/exec';
 
 /**
  * Convierte el PDF generado (jsPDF doc) a base64 y lo envía al
@@ -620,6 +672,35 @@ doc.text('Sin interrupciones >10 min.', margin, yPos);
 yPos += 8;
 }
 
+// Análisis y Recomendaciones de WiFi
+yPos = checkPageBreak(doc, yPos, 40);
+doc.setFontSize(11);
+doc.setFont('helvetica', 'bold');
+doc.setTextColor(0, 56, 77);
+doc.text('ANALISIS TECNICO (CONECTIVIDAD):', margin, yPos);
+yPos += 7;
+doc.setFont('helvetica', 'normal');
+doc.setFontSize(9);
+doc.setTextColor(30, 41, 59);
+const analisisWifi = generarAnalisisEventos(wifiRows.map(r => ({ tipo: r[2], duracion: r[5] })));
+const splitAnalisisWifi = doc.splitTextToSize(analisisWifi, pageWidth - (margin * 2));
+doc.text(splitAnalisisWifi, margin, yPos);
+yPos += (splitAnalisisWifi.length * 5) + 5;
+
+yPos = checkPageBreak(doc, yPos, 40);
+doc.setFontSize(11);
+doc.setFont('helvetica', 'bold');
+doc.setTextColor(0, 56, 77);
+doc.text('RECOMENDACIONES DE CONECTIVIDAD:', margin, yPos);
+yPos += 7;
+doc.setFont('helvetica', 'normal');
+doc.setFontSize(9);
+doc.setTextColor(30, 41, 59);
+const recomWifi = generarRecomendacionesEventos(wifiRows.map(r => ({ tipo: r[2], duracion: r[5] })));
+const splitRecomWifi = doc.splitTextToSize(recomWifi, pageWidth - (margin * 2));
+doc.text(splitRecomWifi, margin, yPos);
+yPos += (splitRecomWifi.length * 5) + 10;
+
     drawHeaderFooter(doc);
     const safeName = sensorName.replace(/[^a-zA-Z0-9]/g, '_');
     const pdfFileName = `Informe_Oficial_Medicamentos_${safeName}_${new Date().toISOString().slice(0,10)}`;
@@ -646,37 +727,63 @@ if (s > 0 || parts.length === 0) parts.push(`${s} seg`);
 return parts.join(' ');
 }
 function setupDaySelector() {
-document.querySelectorAll('.btn-day').forEach(btn => {
-btn.addEventListener('click', () => {
-document.querySelectorAll('.btn-day').forEach(b => b.classList.remove('active'));
-btn.classList.add('active');
-SELECTED_DATE = null;
-document.getElementById('datePicker').value = '';
-run(parseInt(btn.dataset.days));
-});
-});
-document.querySelector(`.btn-day[data-days="${DAYS}"]`).classList.add('active');
+    document.querySelectorAll('.btn-day').forEach(btn => {
+        btn.addEventListener('click', () => {
+            document.querySelectorAll('.btn-day').forEach(b => b.classList.remove('active'));
+            btn.classList.add('active');
+            SELECTED_DATE = null;
+            CUSTOM_START = null;
+            CUSTOM_END = null;
+            document.getElementById('datePicker').value = '';
+            document.getElementById('dateStart').value = '';
+            document.getElementById('dateEnd').value = '';
+            run(parseInt(btn.dataset.days));
+        });
+    });
+    document.querySelector(`.btn-day[data-days="${DAYS}"]`).classList.add('active');
 }
+
 function setupDatePicker() {
-const datePicker = document.getElementById('datePicker');
-datePicker.addEventListener('change', () => {
-if (datePicker.value) {
-SELECTED_DATE = datePicker.value;
-document.querySelectorAll('.btn-day').forEach(b => b.classList.remove('active'));
-run(null);
+    const datePicker = document.getElementById('datePicker');
+    datePicker.addEventListener('change', () => {
+        if (datePicker.value) {
+            SELECTED_DATE = datePicker.value;
+            CUSTOM_START = null;
+            CUSTOM_END = null;
+            document.getElementById('dateStart').value = '';
+            document.getElementById('dateEnd').value = '';
+            document.querySelectorAll('.btn-day').forEach(b => b.classList.remove('active'));
+            run(null);
+        }
+    });
 }
-});
+
+function applyRange() {
+    const start = document.getElementById('dateStart').value;
+    const end = document.getElementById('dateEnd').value;
+    if (!start || !end) {
+        alert("Por favor seleccione fecha de inicio y fin.");
+        return;
+    }
+    CUSTOM_START = start;
+    CUSTOM_END = end;
+    SELECTED_DATE = null;
+    document.getElementById('datePicker').value = '';
+    document.querySelectorAll('.btn-day').forEach(b => b.classList.remove('active'));
+    run(null);
 }
 async function run(days) {
 try {
 document.getElementById('loading').style.display = 'block';
 document.getElementById('content').style.display = 'none';
-let url;
-if (SELECTED_DATE) {
-url = `https://api.thingspeak.com/channels/${ID}/feeds.json?api_key=${KEY}&start=${SELECTED_DATE}T00:00:00Z&end=${SELECTED_DATE}T23:59:59Z`;
-} else {
-url = `https://api.thingspeak.com/channels/${ID}/feeds.json?api_key=${KEY}&minutes=${days * 1440}`;
-}
+    let url;
+    if (CUSTOM_START && CUSTOM_END) {
+        url = `https://api.thingspeak.com/channels/${ID}/feeds.json?api_key=${KEY}&start=${CUSTOM_START}T00:00:00Z&end=${CUSTOM_END}T23:59:59Z`;
+    } else if (SELECTED_DATE) {
+        url = `https://api.thingspeak.com/channels/${ID}/feeds.json?api_key=${KEY}&start=${SELECTED_DATE}T00:00:00Z&end=${SELECTED_DATE}T23:59:59Z`;
+    } else {
+        url = `https://api.thingspeak.com/channels/${ID}/feeds.json?api_key=${KEY}&minutes=${days * 1440}`;
+    }
 const res = await fetch(url);
 const data = await res.json();
 if (!data.feeds || data.feeds.length === 0) {
