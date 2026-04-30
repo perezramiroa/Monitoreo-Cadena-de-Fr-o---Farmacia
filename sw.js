@@ -4,15 +4,14 @@ const urlsToCache = [
   `${PREFIX}/`,
   `${PREFIX}/index.html`,
   `${PREFIX}/Vicus_farmacia.html`,
-  // Si existen otras páginas del proyecto, añádelas con el mismo prefijo, por ejemplo:
-  // `${PREFIX}/Vicus_hemoterapia.html`,
-  // `${PREFIX}/Vicus_vacunas.html`,
+  `${PREFIX}/reporte_individual_farmacia.html`,
   `${PREFIX}/css/pwa-styles.css`,
   `${PREFIX}/js/pwa-utils.js`,
   `${PREFIX}/logos/logo_hnb_oscuro.jpg`,
   `${PREFIX}/logos/logo_rih.jpg`,
   `${PREFIX}/logos/logo_hnb_blanco.jpg`,
-  `${PREFIX}/logos/footer.jpg`
+  `${PREFIX}/logos/footer.jpg`,
+  `${PREFIX}/logos/portal_vicus.png`
 ];
 
 // Instalación del Service Worker
