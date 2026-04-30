@@ -778,9 +778,9 @@ document.getElementById('loading').style.display = 'block';
 document.getElementById('content').style.display = 'none';
     let url;
     if (CUSTOM_START && CUSTOM_END) {
-        url = `https://api.thingspeak.com/channels/${ID}/feeds.json?api_key=${KEY}&start=${CUSTOM_START}T00:00:00Z&end=${CUSTOM_END}T23:59:59Z`;
+        url = `https://api.thingspeak.com/channels/${ID}/feeds.json?api_key=${KEY}&start=${CUSTOM_START}T00:00:00-03:00&end=${CUSTOM_END}T23:59:59-03:00`;
     } else if (SELECTED_DATE) {
-        url = `https://api.thingspeak.com/channels/${ID}/feeds.json?api_key=${KEY}&start=${SELECTED_DATE}T00:00:00Z&end=${SELECTED_DATE}T23:59:59Z`;
+        url = `https://api.thingspeak.com/channels/${ID}/feeds.json?api_key=${KEY}&start=${SELECTED_DATE}T00:00:00-03:00&end=${SELECTED_DATE}T23:59:59-03:00`;
     } else {
         url = `https://api.thingspeak.com/channels/${ID}/feeds.json?api_key=${KEY}&minutes=${days * 1440}`;
     }
