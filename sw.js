@@ -1,4 +1,4 @@
-const CACHE_NAME = 'rsamio-v1.0.0';
+const CACHE_NAME = 'rsamio-v1.1.0';
 const PREFIX = '/Monitoreo-Cadena-de-Fr-o---Farmacia';
 const urlsToCache = [
   `${PREFIX}/`,
@@ -11,7 +11,7 @@ const urlsToCache = [
   `${PREFIX}/logos/logo_rih.jpg`,
   `${PREFIX}/logos/logo_hnb_blanco.jpg`,
   `${PREFIX}/logos/footer.jpg`,
-  `${PREFIX}/logos/portal_vicus.png`
+  `${PREFIX}/logos/portal-vicus.png`
 ];
 
 // Instalación del Service Worker
