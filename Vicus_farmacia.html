@@ -99,16 +99,16 @@ color: white;
 background: #64748b;
 }
 .device-list {
-display: flex;
-flex-direction: column;
-gap: 16px;
+display: grid;
+grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+gap: 20px;
 }
 .device-card {
-background: var(--card-bg);
-border-radius: 12px;
+background: white;
+border-radius: 8px;
 overflow: hidden;
-box-shadow: 0 2px 8px rgba(0,0,0,0.08);
-border-left: 5px solid var(--success);
+box-shadow: 0 4px 6px rgba(0,0,0,0.05);
+border-left: 6px solid #10b981;
 transition: box-shadow 0.2s;
 }
 .device-card.alert {
@@ -125,92 +125,82 @@ animation: pulse 2s infinite;
 }
 .device-header {
 padding: 16px;
-background: #f8fafc;
-font-weight: 600;
+background: white;
+font-weight: bold;
+font-size: 1.1rem;
+color: #1e293b;
 display: flex;
 justify-content: space-between;
 align-items: center;
 }
 .type-badge {
-margin-left: 12px;
-font-size: 0.85rem;
-padding: 2px 10px;
-border-radius: 20px;
+font-size: 0.8rem;
+padding: 4px 10px;
+border-radius: 12px;
 font-weight: 600;
+background-color: #e0f2fe;
+color: #2563eb;
 display: inline-flex;
 align-items: center;
 gap: 4px;
 }
-.farmacia { background-color: rgba(16, 185, 129, 0.15); color: #10b981; }
 .device-body {
 padding: 16px;
-background: #f1f5f9;
-border-top: 1px solid var(--border);
+background: white;
 }
 .sensor-grid {
 display: grid;
-grid-template-columns: repeat(auto-fill, minmax(130px, 1fr));
-gap: 16px;
+grid-template-columns: 1fr 1fr;
+gap: 12px;
 }
 .sensor-card {
 background: white;
-padding: 14px;
-border-radius: 10px;
+padding: 14px 10px;
+border-radius: 8px;
 text-align: center;
 display: flex;
 flex-direction: column;
-box-shadow: 0 2px 4px rgba(0,0,0,0.05);
-border-top: 4px solid var(--success);
+border: 1px solid #e2e8f0;
 }
 .sensor-card.danger {
-border-top-color: var(--danger);
+border-color: #ef4444;
 }
 .sensor-label {
-font-size: 0.85rem;
-color: #64748b;
-margin-bottom: 6px;
-min-height: 36px;
+font-size: 0.9rem;
+font-weight: 600;
+color: #475569;
+margin-bottom: 8px;
 display: flex;
 align-items: center;
 justify-content: center;
 }
 .sensor-value {
-font-size: 1.6rem;
-font-weight: 700;
-color: var(--fg);
-margin-bottom: 10px;
+font-size: 1.8rem;
+font-weight: bold;
+color: #1e293b;
+margin-bottom: 12px;
 }
 .sensor-value.danger {
-color: var(--danger);
+color: #ef4444;
 }
 .btn-hist {
 margin-top: auto;
-padding: 8px;
+padding: 6px;
 width: 100%;
 border: none;
-background: var(--primary);
+background: #3b82f6;
 color: white;
 border-radius: 6px;
 cursor: pointer;
-font-size: 0.8rem;
+font-size: 0.85rem;
 font-weight: 600;
+display: flex;
+align-items: center;
+justify-content: center;
+gap: 6px;
 }
 .btn-hist:hover {
 background: #2563eb;
-}
-.btn-del {
-margin-top: 12px;
-padding: 6px 12px;
-border: 1px solid var(--border);
-background: transparent;
-color: #94a3b8;
-border-radius: 6px;
-font-size: 0.85rem;
-cursor: pointer;
-}
-.btn-del:hover {
-color: var(--danger);
-border-color: var(--danger);
 }
 /* NUEVO: Selector de campos */
 .fields-selector {
@@ -474,20 +464,16 @@ db.forEach(c => {
 const card = document.createElement('div');
 card.className = 'device-card';
 card.id = `p-${c.id}`;
-const typeLabel = 'Farmacia 💊';
+const typeLabel = 'Vacunas 🖊️';
 const typeClass = 'farmacia';
 // Renderizar nombre y tipo
 card.innerHTML = `
 <div class="device-header">
 <span id="n-${c.id}">${c.n}</span>
-<span class="type-badge ${typeClass}">${typeLabel}</span>
-<small>ID: ${c.id}</small>
+<span class="type-badge ${typeClass}" onclick="del('${c.id}')" style="cursor:pointer;" title="Eliminar">${typeLabel}</span>
 </div>
 <div class="device-body">
 <div class="sensor-grid" id="g-${c.id}">Cargando...</div>
-<div style="text-align: right; margin-top: 12px;">
-<button class="btn-del" onclick="del('${c.id}')">Eliminar</button>
-</div>
 </div>
 `;
 app.appendChild(card);
