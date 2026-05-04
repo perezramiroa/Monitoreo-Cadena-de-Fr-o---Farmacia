@@ -102,7 +102,7 @@
 
     <map name="mapaPortal" id="mapaPortal">
       <!-- Zona de Farmacia: Coordenadas calculadas para base 1024x1024 -->
-      <area shape="rect" coords="745,510,965,750" alt="Farmacia" onclick="accederModulo('Farmacia')"
+      <area shape="rect" coords="940,591,1152,902" alt="Farmacia" onclick="accederModulo('Farmacia')"
         style="cursor:pointer;">
     </map>
   </div>
@@ -175,14 +175,6 @@
         areas[i].setAttribute('data-original-coords', areas[i].getAttribute('coords'));
       }
       resizeMap();
-
-      // 🛠 Herramienta de Diagnóstico: Obtener coordenadas al hacer clic
-      document.getElementById('portalImg').addEventListener('click', function (e) {
-        const rect = this.getBoundingClientRect();
-        const x = Math.round((e.clientX - rect.left) * (1254 / this.offsetWidth));
-        const y = Math.round((e.clientY - rect.top) * (1254 / this.offsetHeight));
-        alert(`Coordenadas para el código:\nX: ${x}, Y: ${y}\n\nHaz clic en las dos esquinas del botón y pásame los datos.`);
-      });
     };
   </script>
 </body>
