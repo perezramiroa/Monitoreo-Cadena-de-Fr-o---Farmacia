@@ -4,17 +4,49 @@
 
 class PWAUtils {
   
-  // Registrar Service Worker
+  // Registrar Service Worker con detección de actualizaciones
   static registerServiceWorker() {
     if ('serviceWorker' in navigator) {
       window.addEventListener('load', () => {
         navigator.serviceWorker.register('sw.js')
           .then(registration => {
             console.log('[PWA] Service Worker registrado:', registration.scope);
+
+            // Buscar actualizaciones inmediatamente al cargar
+            registration.update();
+
+            // Intervalo para buscar actualizaciones cada 1 hora (opcional)
+            setInterval(() => {
+              registration.update();
+            }, 1000 * 60 * 60);
+
+            // Detectar cuando hay una nueva versión instalada y esperando
+            registration.onupdatefound = () => {
+              const installingWorker = registration.installing;
+              installingWorker.onstatechange = () => {
+                if (installingWorker.state === 'installed') {
+                  if (navigator.serviceWorker.controller) {
+                    console.log('[PWA] Nueva versión detectada. Aplicando...');
+                    // Notificar al worker que puede tomar el control
+                    installingWorker.postMessage({ type: 'SKIP_WAITING' });
+                  }
+                }
+              };
+            };
           })
           .catch(error => {
             console.error('[PWA] Error registrando SW:', error);
           });
+
+        // Recargar automáticamente cuando el nuevo Service Worker toma el control
+        let refreshing = false;
+        navigator.serviceWorker.addEventListener('controllerchange', () => {
+          if (!refreshing) {
+            console.log('[PWA] El nuevo Service Worker ha tomado el control. Recargando...');
+            window.location.reload();
+            refreshing = true;
+          }
+        });
       });
     }
   }
