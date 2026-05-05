@@ -1,4 +1,4 @@
-const CACHE_NAME = 'rsamio-v1.1.0';
+const CACHE_NAME = 'rsamio-v1.1.1';
 const PREFIX = '/Monitoreo-Cadena-de-Fr-o---Farmacia';
 const urlsToCache = [
   `${PREFIX}/`,
@@ -16,20 +16,20 @@ const urlsToCache = [
 
 // Instalación del Service Worker
 self.addEventListener('install', event => {
-  console.log('[SW] Instalando rsamio...');
+  console.log('[SW] Instalando nueva versión...');
   event.waitUntil(
     caches.open(CACHE_NAME)
       .then(cache => {
-        console.log('[SW] Cacheando archivos...');
+        console.log('[SW] Pre-cacheando archivos esenciales...');
         return cache.addAll(urlsToCache);
       })
       .then(() => self.skipWaiting())
   );
 });
 
-// Activación
+// Activación y limpieza de caches antiguas
 self.addEventListener('activate', event => {
-  console.log('[SW] Activando rsamio...');
+  console.log('[SW] Activando nueva versión...');
   event.waitUntil(
     caches.keys().then(cacheNames => {
       return Promise.all(
@@ -40,43 +40,63 @@ self.addEventListener('activate', event => {
           }
         })
       );
-    })
+    }).then(() => self.clients.claim())
   );
-  return self.clients.claim();
 });
 
-// Interceptación de peticiones
+// Estrategia de peticiones mejorada
 self.addEventListener('fetch', event => {
+  const url = new URL(event.request.url);
+  
+  // 1. Estrategia NETWORK FIRST para archivos HTML (asegura última versión)
+  if (event.request.mode === 'navigate' || url.pathname.endsWith('.html')) {
+    event.respondWith(
+      fetch(event.request)
+        .then(response => {
+          // Si la red responde, guardamos en caché y devolvemos
+          const responseClone = response.clone();
+          caches.open(CACHE_NAME).then(cache => {
+            cache.put(event.request, responseClone);
+          });
+          return response;
+        })
+        .catch(() => {
+          // Si falla la red, usamos la caché
+          return caches.match(event.request);
+        })
+    );
+    return;
+  }
+
+  // 2. Estrategia STALE-WHILE-REVALIDATE para el resto (CSS, JS, Imágenes)
   event.respondWith(
     caches.match(event.request)
-      .then(response => {
-        // Si está en cache, devolverlo
-        if (response) {
-          return response;
+      .then(cachedResponse => {
+        const fetchPromise = fetch(event.request).then(networkResponse => {
+          // Solo cachear si es exitoso y es GET
+          if (networkResponse.status === 200 && event.request.method === 'GET') {
+            const responseClone = networkResponse.clone();
+            caches.open(CACHE_NAME).then(cache => {
+              cache.put(event.request, responseClone);
+            });
+          }
+          return networkResponse;
+        });
+
+        // Devolver la caché inmediatamente si existe, si no esperar a la red
+        return cachedResponse || fetchPromise;
+      }).catch(() => {
+        // Fallback básico para imágenes si falla todo
+        if (event.request.destination === 'image') {
+          return caches.match(`${PREFIX}/logos/portal-vicus.png`);
         }
-
-        // Si no está en cache, hacer la petición real
-        return fetch(event.request)
-          .then(response => {
-            // Clonar la respuesta para guardar en cache
-            const responseClone = response.clone();
-
-            // Solo cachear si es exitoso y es GET
-            if (response.status === 200 && event.request.method === 'GET') {
-              caches.open(CACHE_NAME)
-                .then(cache => {
-                  cache.put(event.request, responseClone);
-                });
-            }
-
-            return response;
-          })
-          .catch(() => {
-            // Si falla la conexión, devolver página offline
-            if (event.request.url.includes('.html')) {
-              return caches.match(`${PREFIX}/index.html`);
-            }
-          });
       })
   );
+});
+
+// Escuchar mensajes para forzar actualización
+self.addEventListener('message', event => {
+  if (event.data && event.data.type === 'SKIP_WAITING') {
+    self.skipWaiting();
+  }
 });
