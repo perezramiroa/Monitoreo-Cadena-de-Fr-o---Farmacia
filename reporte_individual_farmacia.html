@@ -472,6 +472,22 @@ return text.replace(/[\u{1F600}-\u{1F64F}\u{1F300}-\u{1F5FF}\u{1F680}-\u{1F6FF}\
 .replace(/ñ/g, 'n').replace(/Ñ/g, 'N')
 .trim();
 }
+
+/** Convierte una cadena como "1h 24min" de vuelta a minutos para cálculos en el PDF */
+function parseDurationToMinutes(str) {
+    if (!str || str === "--" || str.includes("Sin")) return 0;
+    let total = 0;
+    const days = str.match(/(\d+)\s*d/);
+    const hours = str.match(/(\d+)\s*h/);
+    const mins = str.match(/(\d+)\s*min/);
+    const secs = str.match(/(\d+)\s*seg/);
+    if (days) total += parseInt(days[1]) * 1440;
+    if (hours) total += parseInt(hours[1]) * 60;
+    if (mins) total += parseInt(mins[1]);
+    if (secs) total += parseInt(secs[1]) / 60;
+    return total;
+}
+
 async function downloadPDF() {
 try {
 const trazabilidad = generarCodigoTrazabilidad();
@@ -601,7 +617,7 @@ yPos += 7;
 doc.setFont('helvetica', 'normal');
 doc.setFontSize(9);
 doc.setTextColor(30, 41, 59);
-const analisisAlertas = generarAnalisisAlertas(alertRows.map(r => ({ estado: r[2], duracion: r[3] })));
+const analisisAlertas = generarAnalisisAlertas(alertRows.map(r => ({ estado: r[2], duracion: parseDurationToMinutes(r[3]) })));
 const splitAnalisis = doc.splitTextToSize(analisisAlertas, pageWidth - (margin * 2));
 doc.text(splitAnalisis, margin, yPos);
 yPos += (splitAnalisis.length * 5) + 5;
@@ -615,7 +631,7 @@ yPos += 7;
 doc.setFont('helvetica', 'normal');
 doc.setFontSize(9);
 doc.setTextColor(30, 41, 59);
-const recomAlertas = generarRecomendacionesAlertas(alertRows.map(r => ({ estado: r[2], duracion: r[3] })));
+const recomAlertas = generarRecomendacionesAlertas(alertRows.map(r => ({ estado: r[2], duracion: parseDurationToMinutes(r[3]) })));
 const splitRecom = doc.splitTextToSize(recomAlertas, pageWidth - (margin * 2));
 doc.text(splitRecom, margin, yPos);
 yPos += (splitRecom.length * 5) + 10;
@@ -682,7 +698,7 @@ yPos += 7;
 doc.setFont('helvetica', 'normal');
 doc.setFontSize(9);
 doc.setTextColor(30, 41, 59);
-const analisisWifi = generarAnalisisEventos(wifiRows.map(r => ({ tipo: r[2], duracion: r[5] })));
+const analisisWifi = generarAnalisisEventos(wifiRows.map(r => ({ tipo: r[2], duracion: parseDurationToMinutes(r[5]) })));
 const splitAnalisisWifi = doc.splitTextToSize(analisisWifi, pageWidth - (margin * 2));
 doc.text(splitAnalisisWifi, margin, yPos);
 yPos += (splitAnalisisWifi.length * 5) + 5;
