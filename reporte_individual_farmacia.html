@@ -266,7 +266,7 @@ function guardarObservacion(input, id) {
 }
 
 // ── Google Apps Script – Farmacia ────────────────────────────────────────────
-const APPS_SCRIPT_FARMACIA = 'https://script.google.com/macros/s/AKfycbwpkZYK65xC_fIisU8tygdC0rdmSkjUwqLHicNTw2HwfX_O21pEyK9tGT4xADlrfNATqA/exec';
+const APPS_SCRIPT_FARMACIA = 'https://script.google.com/macros/s/AKfycbyrDuOtiGo-2HOQua3G76Xws_K5lWUi5ZOXvAEWDasK9gGziGwz7YXbdWOLDl6Tm7NruQ/exec';
 
 /**
  * Convierte el PDF generado (jsPDF doc) a base64 y lo envía al
@@ -903,7 +903,8 @@ function generarAnalisisEventos(eventos) {
     if (!eventos || eventos.length === 0) return "No se detectaron interrupciones de conectividad significativas.";
     let totalDuracion = 0;
     eventos.forEach(e => { totalDuracion += parseFloat(e.duracion) || 0; });
-    let analisis = `Se detectaron ${eventos.length} interrupciones de datos.\n`;
+    const n = eventos.length;
+    let analisis = `Se ${n === 1 ? 'detectó' : 'detectaron'} ${n} ${n === 1 ? 'interrupción' : 'interrupciones'} de datos.\n`;
     analisis += `• Tiempo total sin datos: ${formatDurationFull(totalDuracion)}\n\n`;
     if (totalDuracion < 60) analisis += "Los cortes fueron breves y no afectaron significativamente el registro.";
     else analisis += "Los cortes fueron prolongados. Se recomienda revisar la conectividad WiFi.";
