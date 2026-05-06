@@ -1,0 +1,636 @@
+<!DOCTYPE html>
+<html lang="es">
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <title>Monitor Dataloggers - Farmacia</title>
+  <!-- PWA Manifest -->
+  <link rel="manifest" href="./manifest.json">
+  <link rel="icon" type="image/png" href="./icons/icon-192x192.png">
+  <meta name="theme-color" content="#00384d">
+  <link rel="stylesheet" href="./css/pwa-styles.css">
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
+  <style>
+    /* Estilos específicos de Vicus_farmacia.html */
+    .header input,
+    .header select {
+      padding: 12px 16px;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      font-size: 1rem;
+    }
+
+    .header input {
+      flex: 1;
+      min-width: 200px;
+    }
+
+    .header input:focus,
+    .header select:focus {
+      outline: 2px solid var(--primary);
+      border-color: transparent;
+    }
+
+    .header button {
+      padding: 12px 20px;
+      border: none;
+      border-radius: 8px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+
+    .btn-add {
+      background: var(--primary);
+      color: white;
+    }
+
+    .btn-add:hover {
+      background: #2563eb;
+    }
+
+    .btn-clear {
+      background: #94a3b8;
+      color: white;
+    }
+
+    .btn-clear:hover {
+      background: #64748b;
+    }
+
+    .device-list {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+      gap: 20px;
+    }
+
+    .device-card {
+      background: white;
+      border-radius: 8px;
+      overflow: hidden;
+      box-shadow: 0 4px 6px rgba(0, 0, 0, 0.05);
+      border-left: 6px solid #10b981;
+      transition: box-shadow 0.2s;
+    }
+
+    .device-card.alert {
+      border-left-color: var(--danger);
+    }
+
+    .device-card.power-outage {
+      border: 2px solid var(--danger);
+      animation: pulse 2s infinite;
+    }
+
+    @keyframes pulse {
+      0% {
+        box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.4);
+      }
+
+      70% {
+        box-shadow: 0 0 0 10px rgba(239, 68, 68, 0);
+      }
+
+      100% {
+        box-shadow: 0 0 0 0 rgba(239, 68, 68, 0);
+      }
+    }
+
+    .device-header {
+      padding: 16px;
+      background: white;
+      font-weight: bold;
+      font-size: 1.1rem;
+      color: #1e293b;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    .type-badge {
+      font-size: 0.8rem;
+      padding: 4px 10px;
+      border-radius: 12px;
+      font-weight: 600;
+      background-color: #e0f2fe;
+      color: #2563eb;
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+    }
+
+    .device-body {
+      padding: 16px;
+      background: white;
+    }
+
+    .sensor-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 12px;
+    }
+
+    .sensor-card {
+      background: white;
+      padding: 14px 10px;
+      border-radius: 8px;
+      text-align: center;
+      display: flex;
+      flex-direction: column;
+      border: 1px solid #e2e8f0;
+    }
+
+    .sensor-card.danger {
+      border-color: #ef4444;
+    }
+
+    .sensor-label {
+      font-size: 0.9rem;
+      font-weight: 600;
+      color: #475569;
+      margin-bottom: 8px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .sensor-value {
+      font-size: 1.8rem;
+      font-weight: bold;
+      color: #1e293b;
+      margin-bottom: 12px;
+    }
+
+    .sensor-value.danger {
+      color: #ef4444;
+    }
+
+    .btn-hist {
+      margin-top: auto;
+      padding: 6px;
+      width: 100%;
+      border: none;
+      background: #3b82f6;
+      color: white;
+      border-radius: 6px;
+      cursor: pointer;
+      font-size: 0.85rem;
+      font-weight: 600;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+    }
+
+    .btn-hist:hover {
+      background: #2563eb;
+    }
+
+    /* NUEVO: Selector de campos */
+    .fields-selector {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+      margin: 8px 0;
+      padding: 8px;
+      background: #f1f5f9;
+      border-radius: 6px;
+    }
+
+    .field-checkbox {
+      display: inline-block;
+      margin-right: 16px;
+      margin-bottom: 8px;
+    }
+
+    .field-checkbox label {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      cursor: pointer;
+      font-weight: 600;
+    }
+
+    @media (max-width: 600px) {
+      .sensor-grid {
+        grid-template-columns: repeat(auto-fill, minmax(110px, 1fr));
+      }
+    }
+
+    .page-title {
+      text-align: center;
+      font-size: 1.8rem;
+      margin: 16px 0;
+      color: var(--fg);
+      font-weight: 600;
+      background: var(--card-bg);
+      padding: 12px 20px;
+      border-radius: 8px;
+      box-shadow: 0 2px 6px rgba(0, 0, 0, 0.05);
+  </style>
+  <!-- Service Worker y Utilidades PWA -->
+  <script src="./js/pwa-utils.js"></script>
+</head>
+
+<body onload="init()">
+  <div class="header">
+    <div class="logo-bar">
+      <div class="logo-item" style="width:100%;">
+        <img src="logos/logo_rih.jpg" alt="RIH" style="width:100%; height:100%; object-fit:contain;">
+      </div>
+    </div>
+
+
+
+
+
+
+    <div style="display:flex; gap:12px; flex-wrap:wrap; width:100%;">
+      <input type="text" id="urlIn" placeholder="Pega la URL del canal de ThingSpeak..." />
+      <!-- Selector de campos -->
+      <div class="fields-selector">
+        <strong>Sensores:</strong>
+        <div class="field-checkbox">
+          <input type="checkbox" id="field1" value="field1">
+          <label for="field1">Sensor 1</label>
+        </div>
+        <div class="field-checkbox">
+          <input type="checkbox" id="field2" value="field2">
+          <label for="field2">Sensor 2</label>
+        </div>
+        <div class="field-checkbox">
+          <input type="checkbox" id="field3" value="field3">
+          <label for="field3">Señal de Wifi</label>
+        </div>
+      </div>
+    </div>
+    <button class="btn-add" onclick="add()">Agregar</button>
+    <button class="btn-clear" onclick="wipe()">Borrar Todo</button>
+    <button class="btn-clear" onclick="toggleNormativa()">Normativa</button>
+  </div>
+  <h1 class="page-title">Monitoreo de Cadena de Frío para Medicamentos Refrigerados - Farmacia</h1>
+  <div id="app" class="device-list"></div>
+  <div style="margin-top: 8px; text-align: center;">
+    <div style="background-color: #00384d; padding: 6px 16px; border-top: 1px solid var(--border);">
+      <img src="logos/footer.jpg" alt="HNB - Provincia del Neuquén"
+        style="max-width: 100%; height: auto; display: inline-block;">
+    </div>
+  </div>
+  <!-- Panel de Normativa (con formato idéntico a la captura de pantalla) -->
+  <div id="normativaPanel"
+    style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:white; z-index:1000; overflow:auto; padding:20px; box-sizing:border-box;">
+    <div style="max-width:900px; margin:0 auto;">
+      <div style="text-align:right; margin-bottom:20px;">
+        <button onclick="toggleNormativa()"
+          style="padding:8px 16px; background:#ef4444; color:white; border:none; border-radius:6px; cursor:pointer;">Cerrar
+          ✕</button>
+      </div>
+      <div style="text-align:center; margin-bottom:20px;">
+        <div style="display:flex; justify-content:center; gap:30px; flex-wrap:wrap; margin-bottom:16px;">
+          <img src="logos/logo_rih.jpg" alt="RIH" style="max-height:80px; width:100%; object-fit:contain;">
+        </div>
+
+
+        <h1 style="color:#1d4ed8; font-size:24px;">Marco Normativo – Cadena de Frío para Medicamentos Refrigerados</h1>
+        <p>Sistemas de monitoreo – Vicus | Vigencia: Enero 2026</p>
+        <button onclick="buscarTodasNormas()"
+          style="background:#dbeafe; border:1px solid #cbd5e1; padding:6px 12px; border-radius:4px; color:#1d4ed8; cursor:pointer; margin-top:10px;">🔍
+          Verificar todas las normas</button>
+      </div>
+      <div
+        style="background:#fffbeb; border-left:4px solid #fbbf24; padding:12px; margin:16px 0; border-radius:4px; font-size:14px;">
+        ℹ️ <strong>Nota importante:</strong> Si al verificar una norma no se encuentran resultados, esto <em>no
+          significa que haya sido derogada</em>. Puede deberse a cambios en la indexación, formato de publicación o
+        mantenimiento del sitio. En caso de duda, consulte con la autoridad sanitaria competente (Ministerio de Salud de
+        Neuquén o Nación).
+      </div>
+      <!-- SECCIÓN 1: NORMATIVA NACIONAL -->
+      <div
+        style="background:#f8fafc; border-left:4px solid #1d4ed8; padding:20px; border-radius:8px; margin-bottom:20px;">
+        <h2 style="font-size:20px; margin-bottom:16px; color:#1d4ed8;">1. Normativa Nacional</h2>
+        <div
+          style="background:white; padding:16px; border-radius:8px; margin-bottom:16px; box-shadow:0 2px 4px rgba(0,0,0,0.05);">
+          <strong>ANMAT – Disposición N° 10.872/2020</strong>
+          <p style="margin:8px 0;">Buenas Prácticas de Almacenamiento y Distribución de Productos Médicos. Define rangos
+            térmicos (+2°C a +8°C) y obligaciones de monitoreo.</p>
+          <div style="text-align:right; margin-top:8px;">
+            <button
+              onclick="buscarNorma('Disposición 10872/2020 ANMAT productos médicos refrigerados argentina.gob.ar')"
+              style="background:#dbeafe; border:1px solid #cbd5e1; padding:4px 10px; border-radius:4px; font-size:12px; color:#1d4ed8;">Verificar</button>
+          </div>
+        </div>
+        <div
+          style="background:white; padding:16px; border-radius:8px; margin-bottom:16px; box-shadow:0 2px 4px rgba(0,0,0,0.05);">
+          <strong>Ley Nacional N° 16.462</strong>
+          <p style="margin:8px 0;">Ley de Medicamentos. Marco general para la conservación y trazabilidad.</p>
+          <div style="text-align:right; margin-top:8px;">
+            <button onclick="buscarNorma('Ley 16462 medicamentos cadena de frío boletinoficial.gob.ar')"
+              style="background:#dbeafe; border:1px solid #cbd5e1; padding:4px 10px; border-radius:4px; font-size:12px; color:#1d4ed8;">Verificar</button>
+          </div>
+        </div>
+        <div
+          style="background:white; padding:16px; border-radius:8px; margin-bottom:16px; box-shadow:0 2px 4px rgba(0,0,0,0.05);">
+          <strong>Resolución ANMAT N° 368/2000</strong>
+          <p style="margin:8px 0;">Guía de Buenas Prácticas de Almacenamiento. Complementaria a la disposición
+            10872/2020.</p>
+          <div style="text-align:right; margin-top:8px;">
+            <button onclick="buscarNorma('Resolución 368/2000 ANMAT almacenamiento medicamentos argentina.gob.ar')"
+              style="background:#dbeafe; border:1px solid #cbd5e1; padding:4px 10px; border-radius:4px; font-size:12px; color:#1d4ed8;">Verificar</button>
+          </div>
+        </div>
+      </div>
+      <!-- SECCIÓN 2: NORMATIVA PROVINCIAL - NEUQUÉN -->
+      <div
+        style="background:#f8fafc; border-left:4px solid #1d4ed8; padding:20px; border-radius:8px; margin-bottom:20px;">
+        <h2 style="font-size:20px; margin-bottom:16px; color:#1d4ed8;">2. Normativa Provincial – Neuquén</h2>
+        <div
+          style="background:white; padding:16px; border-radius:8px; margin-bottom:16px; box-shadow:0 2px 4px rgba(0,0,0,0.05);">
+          <strong>Decreto Provincial N° 1874/2023</strong>
+          <p style="margin:8px 0;">Sistema Provincial de Trazabilidad en Salud Pública. Aplicable a medicamentos
+            termolábiles.</p>
+          <div style="text-align:right; margin-top:8px;">
+            <button onclick="buscarNorma('Decreto 1874/2023 trazabilidad salud Neuquén neuquen.gov.ar')"
+              style="background:#dbeafe; border:1px solid #cbd5e1; padding:4px 10px; border-radius:4px; font-size:12px; color:#1d4ed8;">Verificar</button>
+          </div>
+        </div>
+        <div
+          style="background:white; padding:16px; border-radius:8px; margin-bottom:16px; box-shadow:0 2px 4px rgba(0,0,0,0.05);">
+          <strong>Resolución Ministerial N° 1285/2022</strong>
+          <p style="margin:8px 0;">Protocolo Provincial de Gestión de la Cadena de Frío en Inmunización. <em>Aplicable
+              por analogía</em> a otros productos sanitarios refrigerados.</p>
+          <div style="text-align:right; margin-top:8px;">
+            <button onclick="buscarNorma('Resolución 1285/2022 cadena de frío inmunización salud.neuquen.gov.ar')"
+              style="background:#dbeafe; border:1px solid #cbd5e1; padding:4px 10px; border-radius:4px; font-size:12px; color:#1d4ed8;">Verificar</button>
+          </div>
+        </div>
+      </div>
+      <!-- SECCIÓN 3: FUENTES OFICIALES -->
+      <div
+        style="background:#f8fafc; border-left:4px solid #1d4ed8; padding:20px; border-radius:8px; margin-bottom:20px;">
+        <h2 style="font-size:20px; margin-bottom:16px; color:#1d4ed8;">3. Fuentes Oficiales</h2>
+        <div
+          style="background:white; padding:16px; border-radius:8px; margin-bottom:16px; box-shadow:0 2px 4px rgba(0,0,0,0.05);">
+          <ul style="padding-left:20px; margin-top:8px; line-height:1.6;">
+            <li><a href="https://www.argentina.gob.ar/anmat/productos-biologicos" target="_blank"
+                style="color:#2563eb; text-decoration:underline;">ANMAT – Productos Biológicos</a></li>
+            <li><a href="https://salud.neuquen.gov.ar/programas/inmunizaciones/" target="_blank"
+                style="color:#2563eb; text-decoration:underline;">Inmunizaciones – Ministerio de Salud de Neuquén
+                (Protocolo Generalizable)</a></li>
+          </ul>
+        </div>
+      </div>
+      <!-- SECCIÓN DE CONCLUSIÓN -->
+      <div
+        style="background:#f8fafc; border-left:4px solid #1d4ed8; padding:20px; border-radius:8px; margin-bottom:20px;">
+        <h2 style="font-size:20px; margin-bottom:16px; color:#1d4ed8;">Conclusión</h2>
+        <p>El módulo "Farmacia" de Vicus cumple con la normativa vigente para medicamentos refrigerados siempre que se
+          respeten los rangos térmicos (+2°C a +8°C), se incluyan los elementos gráficos exigidos por Neuquén, y se
+          permita el registro y exportación detallada de eventos térmicos.</p>
+      </div>
+    </div>
+  </div>
+  <script>
+    const MAX = 8.0, MIN = 2.0;
+    const WIFI_CUTOFF = 10;
+    const APPS_SCRIPT_FARMACIA = 'https://script.google.com/macros/s/AKfycbwCG1Z-_demyHCt62_iqBy0evJ9mk8eIOTbp5FOhzIKEP26-Mv8WN6vYEh3h-JWorD2Pw/exec';
+
+    // ── Canales pre-cargados de fábrica ──────────────────────────────────────────
+    const CANALES_DEFAULT = [
+      { id: '2982082', k: 'QNVRZIG08IBMZD2A', n: 'Depósito 1', type: 'farmacia', fields: ['field1'], area: 'Depósito' },
+      { id: '2982085', k: 'F7X0FHMTQGVZNHJ4', n: 'Depósito 2', type: 'farmacia', fields: ['field1', 'field2'], area: 'Depósito' },
+      { id: '2981109', k: 'QQFIB5N64K8KH86H', n: 'Farmacia Ambulatoria', type: 'farmacia', fields: ['field1'], area: 'Farmacia Ambulatoria' }
+    ];
+
+    let db = JSON.parse(localStorage.getItem('iot_db_farmacia'));
+    if (!db || db.length === 0) {
+      db = JSON.parse(JSON.stringify(CANALES_DEFAULT));
+      localStorage.setItem('iot_db_farmacia', JSON.stringify(db));
+    }
+    function formatDurationFull(minutesFloat) {
+      const totalSeconds = Math.round(minutesFloat * 60);
+      const d = Math.floor(totalSeconds / 86400);
+      const h = Math.floor((totalSeconds % 86400) / 3600);
+      const m = Math.floor((totalSeconds % 3600) / 60);
+      const s = totalSeconds % 60;
+      let parts = [];
+      if (d > 0) parts.push(`${d} d`);
+      if (h > 0) parts.push(`${h} h`);
+      if (m > 0) parts.push(`${m} min`);
+      if (s > 0 || parts.length === 0) parts.push(`${s} seg`);
+      return parts.join(' ');
+    }
+    function init() {
+      render();
+      setInterval(refresh, 10000);
+      refresh();
+    }
+    function add() {
+      try {
+        const input = document.getElementById('urlIn').value.trim();
+        const type = "farmacia";
+        // Obtener campos seleccionados
+        const fields = [];
+        if (document.getElementById('field1').checked) fields.push('field1');
+        if (document.getElementById('field2').checked) fields.push('field2');
+        if (document.getElementById('field3').checked) fields.push('field3');
+        if (!input) return alert("Ingresa una URL.");
+        if (fields.length === 0) return alert("Selecciona al menos un campo.");
+        const u = new URL(input);
+        const k = u.searchParams.get('api_key');
+        const match = u.pathname.match(/channels\/(\d+)/);
+        const id = match ? match[1] : null;
+        if (!id || !k) throw new Error("Faltan ID o API key");
+        // Verificar si ya existe
+        if (!db.some(x => x.id == id)) {
+          db.push({ id, k, n: `ID: ${id}`, type, fields });
+          save();
+          render();
+          refresh();
+        }
+        document.getElementById('urlIn').value = "";
+        document.getElementById('field1').checked = false;
+        document.getElementById('field2').checked = false;
+        document.getElementById('field3').checked = false;
+      } catch (e) {
+        alert("URL inválida. Usa el enlace completo del canal con api_key.");
+      }
+    }
+    function wipe() {
+      if (confirm("¿Borrar todos los dispositivos?")) {
+        db = [];
+        save();
+        render();
+      }
+    }
+    function del(id) {
+      db = db.filter(x => x.id != id);
+      save();
+      render();
+    }
+    function save() {
+      localStorage.setItem('iot_db_farmacia', JSON.stringify(db));
+    }
+    function render() {
+      const app = document.getElementById('app');
+      app.innerHTML = "";
+      db.forEach(c => {
+        const card = document.createElement('div');
+        card.className = 'device-card';
+        card.id = `p-${c.id}`;
+        const typeLabel = 'Farmacia 💊 ❌';
+        const typeClass = 'farmacia';
+        // Renderizar nombre y tipo
+        card.innerHTML = `
+<div class="device-header">
+<span id="n-${c.id}">${c.n}</span>
+<span class="type-badge ${typeClass}" onclick="del('${c.id}')" style="cursor:pointer;" title="Eliminar">${typeLabel}</span>
+</div>
+<div class="device-body">
+<div class="sensor-grid" id="g-${c.id}">Cargando...</div>
+</div>
+`;
+        app.appendChild(card);
+        // Renderizar cada campo
+        if (c.fields && c.fields.length > 0) {
+          const grid = document.getElementById(`g-${c.id}`);
+          grid.innerHTML = "";
+          c.fields.forEach(f => {
+            const fieldCard = document.createElement('div');
+            fieldCard.className = 'sensor-card';
+            fieldCard.id = `f-${c.id}-${f}`;
+            fieldCard.innerHTML = `
+<div class="sensor-label" id="l-${c.id}-${f}">Cargando...</div>
+<div class="sensor-value" id="v-${c.id}-${f}">--</div>
+<button class="btn-hist" onclick="openRep('${c.id}','${c.k}','${f}','${c.type}')">📊 Gráfico</button>
+`;
+            grid.appendChild(fieldCard);
+          });
+        }
+      });
+    }
+    function checkRecentPowerOutage(c, feeds) {
+      const now = new Date();
+      const twentyFourHoursAgo = new Date(now.getTime() - 24 * 60 * 60 * 1000);
+      for (let i = 1; i < feeds.length; i++) {
+        const prevTime = new Date(feeds[i - 1].created_at);
+        const currTime = new Date(feeds[i].created_at);
+        if (currTime < twentyFourHoursAgo) continue;
+        const diffMin = (currTime - prevTime) / 60000;
+        if (diffMin > WIFI_CUTOFF) {
+          const tb = parseFloat(feeds[i - 1][c.fields[0]]);
+          const ta = parseFloat(feeds[i][c.fields[0]]);
+          const validA = !isNaN(ta);
+          const inRangeAfter = validA && ta >= MIN && ta <= MAX;
+          if (validA && !inRangeAfter) return true;
+        }
+      }
+      return false;
+    }
+    async function refresh() {
+      for (let c of db) {
+        if (!c.alertsState) c.alertsState = {};
+        try {
+          const url = `https://api.thingspeak.com/channels/${c.id}/feeds.json?api_key=${c.k}&results=100`;
+          const r = await fetch(url);
+          const d = await r.json();
+          if (!d.channel || !d.feeds || d.feeds.length === 0) continue;
+          c.n = d.channel.name || `ID: ${c.id}`;
+          const nameEl = document.getElementById(`n-${c.id}`);
+          if (nameEl) nameEl.innerText = c.n;
+          // Para cada campo seleccionado
+          for (let f of c.fields) {
+            const fLabel = d.channel[f] || f;
+            const fValue = parseFloat(d.feeds[0][f]);
+            // Actualizar etiqueta y valor
+            const labelEl = document.getElementById(`l-${c.id}-${f}`);
+            const valueEl = document.getElementById(`v-${c.id}-${f}`);
+            if (labelEl) labelEl.innerText = fLabel;
+            if (valueEl) {
+              valueEl.innerText = isNaN(fValue) ? '--' : fValue.toFixed(1);
+              // Colorear según rango
+              if (f === 'field1' || f === 'field2') { // asumimos temperaturas
+                if (fValue < MIN || fValue > MAX) {
+                  valueEl.classList.add('danger');
+                } else {
+                  valueEl.classList.remove('danger');
+                }
+              }
+            }
+            // Actualizar estado de alerta
+            const isDanger = (f === 'field1' || f === 'field2') && !isNaN(fValue) && (fValue > MAX || fValue < MIN);
+            if (isDanger) {
+              checkTemperatureAlerts(fLabel, fValue, MIN, MAX);
+            }
+            c.alertsState[f] = isDanger;
+            // Actualizar clase de tarjeta
+            const cardEl = document.getElementById(`f-${c.id}-${f}`);
+            if (cardEl) {
+              cardEl.classList.toggle('danger', isDanger);
+            }
+          }
+          // Actualizar estado de tarjeta principal
+          const hasAnyAlert = c.fields.some(f => c.alertsState[f]);
+          const card = document.getElementById(`p-${c.id}`);
+          if (card) {
+            card.classList.toggle('alert', hasAnyAlert);
+            const hasPowerOutage = checkRecentPowerOutage(c, d.feeds);
+            card.classList.toggle('power-outage', hasPowerOutage);
+          }
+          save();
+        } catch (e) { console.warn(`Error al cargar canal ${c.id}:`, e); }
+      }
+    }
+    function openRep(id, k, f, type) {
+      window.open(`reporte_individual_farmacia.html?id=${id}&key=${k}&field=${f}&type=${type}&days=7`, '_blank');
+    }
+    // === FUNCIONES DE NORMATIVA ===
+    function toggleNormativa() {
+      const panel = document.getElementById('normativaPanel');
+      panel.style.display = panel.style.display === 'block' ? 'none' : 'block';
+    }
+    function buscarNorma(query) {
+      window.open(`https://www.google.com/search?q=${encodeURIComponent(query)}`, '_blank');
+    }
+    function buscarTodasNormas() {
+      if (confirm('¿Desea abrir pestañas para verificar todas las normas?')) {
+        const queries = [
+          'Disposición 10872/2020 ANMAT productos médicos refrigerados argentina.gob.ar',
+          'Ley 16462 medicamentos cadena de frío boletinoficial.gob.ar',
+          'Resolución 368/2000 ANMAT almacenamiento medicamentos argentina.gob.ar',
+          'Decreto 1874/2023 trazabilidad salud Neuquén neuquen.gov.ar',
+          'Resolución 1285/2022 cadena de frío inmunización salud.neuquen.gov.ar'
+        ];
+        queries.forEach((q, i) => {
+          setTimeout(() => window.open(`https://www.google.com/search?q=${encodeURIComponent(q)}`, '_blank'), i * 600);
+        });
+      }
+    }
+    // === NOTIFICACIONES PUSH ===
+    function checkTemperatureAlerts(sensorName, temperature, minTemp, maxTemp) {
+      if (temperature < minTemp || temperature > maxTemp) {
+        if ('Notification' in window && Notification.permission === 'granted') {
+          new Notification('⚠️ ALERTA DE TEMPERATURA', {
+            body: `Sensor: ${sensorName}\nTemperatura: ${temperature}°C\nRango: ${minTemp}°C - ${maxTemp}°C`,
+            icon: '../icons/icon-192x192.png',
+            vibrate: [200, 100, 200],
+            requireInteraction: true
+          });
+        }
+      }
+    }
+
+    // === TRAZABILIDAD ===
+    function generarCodigoTrazabilidad(prefijo) {
+      const now = new Date();
+      const fecha = now.toISOString().slice(0, 10).replace(/-/g, '');
+      const hora = now.toTimeString().slice(0, 8).replace(/:/g, '');
+      const rand = Math.random().toString(36).toUpperCase().slice(2, 7);
+      return `${prefijo}-${fecha}-${hora}-${rand}`;
+    }
+
+
+
+
+  </script>
+</body>
