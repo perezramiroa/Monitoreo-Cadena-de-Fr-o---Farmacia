@@ -1,4 +1,4 @@
-const CACHE_NAME = 'rsamio-v1.1.2';
+const CACHE_NAME = 'rsamio-v1.1.3';
 const PREFIX = '/Monitoreo-Cadena-de-Fr-o---Farmacia';
 const urlsToCache = [
   `${PREFIX}/`,
@@ -51,6 +51,7 @@ self.addEventListener('fetch', event => {
   if (url.hostname.includes('script.google.com') || 
       url.hostname.includes('script.googleusercontent.com') ||
       url.hostname.includes('api.thingspeak.com')) {
+    console.log('[SW] Ignorando petición externa (CORS bypass):', url.hostname);
     return; // Dejar que el navegador maneje la petición normalmente
   }
   
