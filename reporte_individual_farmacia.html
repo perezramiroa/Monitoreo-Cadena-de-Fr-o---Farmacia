@@ -399,11 +399,11 @@ async function downloadPDF() {
   document.getElementById('downloadBtn').innerText = 'Generando...';
   const trazabilidad = generarCodigoTrazabilidad();
 
-  try {
-    const doc = new jsPDF('p', 'mm', 'a4');
+ try {
+    const { jsPDF } = window.jspdf;
+    const doc = new jsPDF(\'p\', \'mm\', \'a4\');
     const pageWidth = doc.internal.pageSize.getWidth();
     const margin = 15;
-
     // Capturar logos directamente del DOM para evitar problemas de carga externa
     const getBase64Image = (imgId) => {
       try {
