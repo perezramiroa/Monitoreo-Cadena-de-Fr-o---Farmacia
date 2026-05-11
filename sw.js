@@ -1,4 +1,4 @@
-const CACHE_NAME = 'rsamio-v1.1.1';
+const CACHE_NAME = 'rsamio-v1.1.2';
 const PREFIX = '/Monitoreo-Cadena-de-Fr-o---Farmacia';
 const urlsToCache = [
   `${PREFIX}/`,
@@ -45,6 +45,14 @@ self.addEventListener('activate', event => {
 // Estrategia de peticiones mejorada
 self.addEventListener('fetch', event => {
   const url = new URL(event.request.url);
+
+  // EXCLUIR Google Apps Script y ThingSpeak de la interceptación del SW
+  // Estas peticiones deben ir directo a la red para evitar problemas de CORS
+  if (url.hostname.includes('script.google.com') || 
+      url.hostname.includes('script.googleusercontent.com') ||
+      url.hostname.includes('api.thingspeak.com')) {
+    return; // Dejar que el navegador maneje la petición normalmente
+  }
   
   // 1. Estrategia NETWORK FIRST para archivos HTML (asegura última versión)
   if (event.request.mode === 'navigate' || url.pathname.endsWith('.html')) {
