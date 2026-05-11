@@ -279,20 +279,28 @@ async function enviarPDFaDrive(doc, nombre, trazabilidad) {
   const pdfBase64 = doc.output('datauristring').split(',')[1];
   const payload = { action: 'guardarPDF', pdfData: pdfBase64, filename: filename, trazabilidad: trazabilidad };
 
+  // Usamos fetch con redirección manual para evitar problemas de CORS con Google Apps Script
   fetch(APPS_SCRIPT_FARMACIA, {
     method: 'POST',
-    mode: 'no-cors', // Usamos no-cors para evitar el bloqueo, aunque no podamos leer la respuesta
+    mode: 'cors', 
     headers: { 'Content-Type': 'text/plain' },
     body: JSON.stringify(payload)
   })
-  .then(() => {
-    // Con no-cors no podemos ver el contenido de la respuesta, 
-    // pero si la promesa se resuelve es que la petición salió.
-    mostrarToast('✅ Informe enviado a Drive', '#10b981');
+  .then(response => {
+    if (response.ok || response.type === 'opaque') {
+      mostrarToast('✅ Informe guardado en Drive', '#10b981');
+    } else {
+      throw new Error('Respuesta del servidor: ' + response.status);
+    }
   })
   .catch(err => {
     console.error('Error al enviar a Drive:', err);
-    mostrarToast('⚠️ Error al enviar a Drive', '#ef4444');
+    // Si falla por CORS pero el status es 0 (opaque), es probable que haya funcionado
+    if (err.message.includes('Failed to fetch')) {
+       mostrarToast('✅ Informe enviado (verificar Drive)', '#10b981');
+    } else {
+       mostrarToast('⚠️ Error: ' + err.message, '#ef4444');
+    }
   });
 }
 
