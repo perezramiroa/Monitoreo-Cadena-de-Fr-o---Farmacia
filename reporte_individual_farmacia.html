@@ -338,6 +338,12 @@ async function enviarPDFaDrive(doc, nombre, trazabilidad) {
 
 
 
+
+
+
+
+
+
 /** Genera un código de trazabilidad RPT-FARM-YYYYMMDD-HHMMSS-XXXXX */
 function generarCodigoTrazabilidad() {
   const now = new Date();
@@ -353,312 +359,328 @@ function mostrarToast(msg, color = '#10b981') {
   const t = document.createElement('div');
   t.textContent = msg;
   t.style.cssText = `position:fixed;bottom:24px;right:24px;background:${color};color:#fff;
-    padding:12px 20px;border-radius:10px;font-size:.9rem;z-index:9999;
-    box-shadow:0 4px 16px rgba(0,0,0,.2);transition:opacity .5s;`;
+    padding:10px 16px;border-radius:8px;font-size:0.9rem;box-shadow:0 4px 12px rgba(0,0,0,0.15);
+    z-index:9999;opacity:0;transition:opacity 0.3s ease-out;`;
   document.body.appendChild(t);
-  setTimeout(() => { t.style.opacity = '0'; setTimeout(() => t.remove(), 600); }, 4000);
+  setTimeout(() => t.style.opacity = 1, 10);
+  setTimeout(() => {
+    t.style.opacity = 0;
+    t.addEventListener('transitionend', () => t.remove());
+  }, 3000);
 }
-window.onload = () => {
-if (!ID || !KEY) {
-document.getElementById('status').innerText = "Error: Faltan parámetros ID o KEY.";
-return;
-}
-document.getElementById('issueDate').innerText = new Date().toLocaleDateString('es-AR');
-setupDaySelector();
-setupDatePicker();
-run(DAYS);
-};
+
 function cleanTextForPDF(text) {
-if (!text) return "";
-return text.replace(/[\u{1F600}-\u{1F64F}\u{1F300}-\u{1F5FF}\u{1F680}-\u{1F6FF}\u{2600}-\u{26FF}\u{2700}-\u{27BF}\u{1F900}-\u{1F9FF}\u{1F1E6}-\u{1F1FF}]/gu, '')
-.replace(/[💉💊⚠️❄️🔥✅⚡📶📡]/gu, '')
-.replace(/á/g, 'a').replace(/é/g, 'e').replace(/í/g, 'i').replace(/ó/g, 'o').replace(/ú/g, 'u')
-.replace(/Á/g, 'A').replace(/É/g, 'E').replace(/Í/g, 'I').replace(/Ó/g, 'O').replace(/Ú/g, 'U')
-.replace(/ñ/g, 'n').replace(/Ñ/g, 'N')
-.trim();
+    return text.replace(/\n/g, ' ').replace(/\s\s+/g, ' ').trim();
 }
 
-/** Convierte una cadena como "1h 24min" de vuelta a minutos para cálculos en el PDF */
-function parseDurationToMinutes(str) {
-    if (!str || str === "--" || str.includes("Sin")) return 0;
-    let total = 0;
-    const days = str.match(/(\d+)\s*d/);
-    const hours = str.match(/(\d+)\s*h/);
-    const mins = str.match(/(\d+)\s*min/);
-    const secs = str.match(/(\d+)\s*seg/);
-    if (days) total += parseInt(days[1]) * 1440;
-    if (hours) total += parseInt(hours[1]) * 60;
-    if (mins) total += parseInt(mins[1]);
-    if (secs) total += parseInt(secs[1]) / 60;
-    return total;
+function parseDurationToMinutes(durationStr) {
+    if (!durationStr || durationStr === '--') return 0;
+    let totalMinutes = 0;
+    const parts = durationStr.split(' ');
+    for (let i = 0; i < parts.length; i++) {
+        if (parts[i].includes('d')) {
+            totalMinutes += parseInt(parts[i]) * 24 * 60;
+        } else if (parts[i].includes('h')) {
+            totalMinutes += parseInt(parts[i]) * 60;
+        } else if (parts[i].includes('min')) {
+            totalMinutes += parseInt(parts[i]);
+        } else if (parts[i].includes('seg')) {
+            totalMinutes += parseInt(parts[i]) / 60;
+        }
+    }
+    return totalMinutes;
 }
 
+// ── Generación de PDF ───────────────────────────────────────────────────────
 async function downloadPDF() {
-try {
-const trazabilidad = generarCodigoTrazabilidad();
-const { jsPDF } = window.jspdf;
-const doc = new jsPDF('p', 'mm', 'a4');
-const pageWidth = doc.internal.pageSize.getWidth();
-const margin = 15;
-// Capturar logos directamente del DOM para evitar problemas de carga externa
-        const getBase64Image = (imgId) => {
-          try {
-            const img = document.getElementById(imgId);
-            if (!img) return null;
-            if (img.src.startsWith('data:image')) return img.src;
-            if (!img.complete || img.naturalWidth === 0) return null;
-            const canvas = document.createElement("canvas");
-            canvas.width = img.naturalWidth;
-            canvas.height = img.naturalHeight;
-            const ctx = canvas.getContext("2d");
-            ctx.drawImage(img, 0, 0);
-            return canvas.toDataURL("image/jpeg");
-          } catch (e) { return null; }
-        };
-        const b64_1 = null;
-const b64_2 = getBase64Image('webLogo2');
-        const b64_3 = null;
-const b64_footer = getBase64Image('webFooter');
-        const drawHeaderFooter = (pdf) => {
-          const pageCount = pdf.internal.getNumberOfPages();
-          for (let i = 1; i <= pageCount; i++) {
-            pdf.setPage(i);
-            // Encabezado
-            // Header (RIH centered and large)
-            if(b64_2) pdf.addImage(b64_2, 'JPEG', 0, 10, pageWidth, 20);
-            
-            
-            pdf.setDrawColor(226, 232, 240);
-            pdf.line(margin, 35, pageWidth - margin, 35);
-            
-            // Pie de página
-            pdf.setFillColor(0, 56, 77);
-            pdf.rect(0, 272, pageWidth, 25, 'F');
-            if(b64_footer) pdf.addImage(b64_footer, 'JPEG', 0, 274, pageWidth, 20);
-            
-            pdf.setFontSize(8);
-            pdf.setTextColor(255, 255, 255);
+  document.getElementById('downloadBtn').disabled = true;
+  document.getElementById('downloadBtn').innerText = 'Generando...';
+  const trazabilidad = generarCodigoTrazabilidad();
 
-            pdf.text(`Pagina ${i} de ${pageCount}`, pageWidth - margin, 292, { align: 'right' });
-          }
-        };
+  try {
+    const doc = new jsPDF('p', 'mm', 'a4');
+    const pageWidth = doc.internal.pageSize.getWidth();
+    const margin = 15;
 
-let yPos = 45;
-const sensorName = cleanTextForPDF(document.getElementById('sensorName').innerText);
-const teamName = cleanTextForPDF(document.getElementById('teamName').innerText);
-doc.setFontSize(16);
-doc.setFont('helvetica', 'bold');
-doc.setTextColor(0, 56, 77);
-        const title = "INFORME TECNICO DE CADENA DE FRIO - MEDICAMENTOS REFRIGERADOS";
-        doc.setFontSize(14); // Reducimos de 16 a 14
-        const splitTitle = doc.splitTextToSize(title, pageWidth - (margin * 2));
-        doc.text(splitTitle, margin, yPos);
-        yPos += (splitTitle.length > 1) ? 15 : 10;
-yPos += 10;
-doc.setFontSize(10);
-doc.setFont('helvetica', 'italic');
-doc.setTextColor(100);
-doc.text("Segun Disposicion ANMAT 10.872/2020", margin, yPos);
-yPos += 12;
-doc.setFont('helvetica', 'bold');
-doc.setFontSize(12);
-doc.setTextColor(30, 41, 59);
-doc.text(`Dispositivo: ${sensorName}`, margin, yPos);
-yPos += 6;
-doc.setFont('helvetica', 'normal');
-doc.text(`Ubicacion/Equipo: ${teamName}`, margin, yPos);
-yPos += 10;
-doc.setFontSize(9);
-doc.text(cleanTextForPDF(document.getElementById('reportId').innerText), margin, yPos);
-doc.text(`Emision: ${document.getElementById('issueDate').innerText}`, pageWidth - margin, yPos, { align: 'right' });
-yPos += 6;
-doc.setFontSize(8);
-doc.text(`Trazabilidad: ${trazabilidad}`, margin, yPos);
-yPos += 10;
+    // Capturar logos directamente del DOM para evitar problemas de carga externa
+    const getBase64Image = (imgId) => {
+      try {
+        const img = document.getElementById(imgId);
+        if (!img) return null;
+        if (img.src.startsWith('data:image')) return img.src;
+        if (!img.complete || img.naturalWidth === 0) return null;
+        const canvas = document.createElement("canvas");
+        canvas.width = img.naturalWidth;
+        canvas.height = img.naturalHeight;
+        const ctx = canvas.getContext("2d");
+        ctx.drawImage(img, 0, 0);
+        return canvas.toDataURL("image/jpeg");
+      } catch (e) { return null; }
+    };
+    const b64_1 = null;
+    const b64_2 = getBase64Image('webLogo2');
+    const b64_3 = null;
+    const b64_footer = getBase64Image('webFooter');
 
-const canvas = document.getElementById('chart');
-if (canvas) {
-const imgData = canvas.toDataURL('image/png');
-const imgWidth = pageWidth - 2 * margin;
-const imgHeight = (imgWidth * canvas.height) / canvas.width;
-doc.addImage(imgData, 'PNG', margin, yPos, imgWidth, imgHeight);
-yPos += imgHeight + 10;
-}
+    const drawHeaderFooter = (pdf) => {
+      const pageCount = pdf.internal.getNumberOfPages();
+      for (let i = 1; i <= pageCount; i++) {
+        pdf.setPage(i);
+        // Encabezado
+        // Header (RIH centered and large)
+        if(b64_2) pdf.addImage(b64_2, 'JPEG', 0, 10, pageWidth, 20);
+        
+        
+        pdf.setDrawColor(226, 232, 240);
+        pdf.line(margin, 35, pageWidth - margin, 35);
+        
+        // Pie de página
+        pdf.setFillColor(0, 56, 77);
+        pdf.rect(0, 272, pageWidth, 25, 'F');
+        if(b64_footer) pdf.addImage(b64_footer, 'JPEG', 0, 274, pageWidth, 20);
+        
+        pdf.setFontSize(8);
+        pdf.setTextColor(255, 255, 255);
 
-if (yPos > 250) { doc.addPage(); yPos = 45; }
-doc.setFontSize(12);
-const alertRows = [];
-document.querySelectorAll('#alertTable tbody tr').forEach((tr, idx) => {
-    const cells = Array.from(tr.cells).map((td, cIdx) => {
-        if (cIdx === 4) { // Columna Observaciones
-            const input = td.querySelector('input');
-            return input ? cleanTextForPDF(input.value) : '';
-        }
-        return cleanTextForPDF(td.innerText);
-    });
-    if (cells.length === 5 && !cells[0].toLowerCase().includes('sin eventos')) {
-        alertRows.push(cells);
+        pdf.text(`Pagina ${i} de ${pageCount}`, pageWidth - margin, 292, { align: 'right' });
+      }
+    };
+
+    let yPos = 45;
+    const sensorName = cleanTextForPDF(document.getElementById('sensorName').innerText);
+    const teamName = cleanTextForPDF(document.getElementById('teamName').innerText);
+    doc.setFontSize(16);
+    doc.setFont('helvetica', 'bold');
+    doc.setTextColor(0, 56, 77);
+    const title = "INFORME TECNICO DE CADENA DE FRIO - MEDICAMENTOS REFRIGERADOS";
+    doc.setFontSize(14); // Reducimos de 16 a 14
+    const splitTitle = doc.splitTextToSize(title, pageWidth - (margin * 2));
+    doc.text(splitTitle, margin, yPos);
+    yPos += (splitTitle.length > 1) ? 15 : 10;
+    yPos += 10;
+    doc.setFontSize(10);
+    doc.setFont('helvetica', 'italic');
+    doc.setTextColor(100);
+    doc.text("Segun Disposicion ANMAT 10.872/2020", margin, yPos);
+    yPos += 12;
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(12);
+    doc.setTextColor(30, 41, 59);
+    doc.text(`Dispositivo: ${sensorName}`, margin, yPos);
+    yPos += 6;
+    doc.setFont('helvetica', 'normal');
+    doc.text(`Ubicacion/Equipo: ${teamName}`, margin, yPos);
+    yPos += 10;
+    doc.setFontSize(9);
+    doc.text(cleanTextForPDF(document.getElementById('reportId').innerText), margin, yPos);
+    doc.text(`Emision: ${document.getElementById('issueDate').innerText}`, pageWidth - margin, yPos, { align: 'right' });
+    yPos += 6;
+    doc.setFontSize(8);
+    doc.text(`Trazabilidad: ${trazabilidad}`, margin, yPos);
+    yPos += 10;
+
+    const canvas = document.getElementById('chart');
+    if (canvas) {
+      // Forzar el redibujado del gráfico para asegurar que las dimensiones sean correctas
+      if (chartInstance) {
+          chartInstance.resize(); // Asegura que Chart.js redimensione el canvas
+      }
+
+      // Esperar un breve momento para que el navegador aplique los cambios de renderizado
+      // Esto es una solución pragmática para problemas de sincronización en algunos navegadores/dispositivos
+      await new Promise(resolve => setTimeout(resolve, 100)); // Espera 100ms
+
+      const imgData = canvas.toDataURL('image/png', 1.0); // Calidad 1.0 para mejor resolución
+      const imgWidth = pageWidth - 2 * margin;
+      const aspectRatio = canvas.width / canvas.height; // Calcular la relación de aspecto actual del canvas
+      let imgHeight = imgWidth / aspectRatio; // Calcular la altura basada en el ancho del PDF y la relación de aspecto
+
+      // Opcional: Limitar la altura máxima para evitar que el gráfico ocupe demasiado espacio vertical
+      const maxHeight = 100; // Por ejemplo, 100mm de altura máxima para el gráfico
+      if (imgHeight > maxHeight) {
+          imgHeight = maxHeight;
+          // Si se limita la altura, el ancho también debe ajustarse para mantener la relación de aspecto
+          // imgWidth = imgHeight * aspectRatio;
+      }
+
+      doc.addImage(imgData, 'PNG', margin, yPos, imgWidth, imgHeight);
+      yPos += imgHeight + 10;
     }
-});
-if (alertRows.length > 0) {
-    doc.autoTable({
-        startY: yPos,
-        head: [['Fecha y Hora', 'Valor', 'Estado', 'Duración', 'Observaciones']],
-        body: alertRows,
-        theme: 'grid',
-        styles: { fontSize: 8, cellPadding: 2 },
-        headStyles: { fillColor: [241, 245, 249], textColor: [30, 41, 59], fontStyle: 'bold' },
-        margin: { top: 40, bottom: 30, left: margin, right: margin }
-    });
-    yPos = doc.lastAutoTable.finalY + 10;
 
-// Análisis y Recomendaciones de Alertas
-yPos = checkPageBreak(doc, yPos, 40);
-doc.setFontSize(11);
-doc.setFont('helvetica', 'bold');
-doc.setTextColor(0, 56, 77);
-doc.text('ANALISIS TECNICO:', margin, yPos);
-yPos += 7;
-doc.setFont('helvetica', 'normal');
-doc.setFontSize(9);
-doc.setTextColor(30, 41, 59);
-const analisisAlertas = generarAnalisisAlertas(alertRows.map(r => ({ estado: r[2], duracion: parseDurationToMinutes(r[3]) })));
-const splitAnalisis = doc.splitTextToSize(analisisAlertas, pageWidth - (margin * 2));
-doc.text(splitAnalisis, margin, yPos);
-yPos += (splitAnalisis.length * 5) + 5;
-
-yPos = checkPageBreak(doc, yPos, 40);
-doc.setFontSize(11);
-doc.setFont('helvetica', 'bold');
-doc.setTextColor(0, 56, 77);
-doc.text('RECOMENDACIONES:', margin, yPos);
-yPos += 7;
-doc.setFont('helvetica', 'normal');
-doc.setFontSize(9);
-doc.setTextColor(30, 41, 59);
-const recomAlertas = generarRecomendacionesAlertas(alertRows.map(r => ({ estado: r[2], duracion: parseDurationToMinutes(r[3]) })));
-const splitRecom = doc.splitTextToSize(recomAlertas, pageWidth - (margin * 2));
-doc.text(splitRecom, margin, yPos);
-yPos += (splitRecom.length * 5) + 10;
-
-} else {
-doc.setFont('helvetica', 'normal');
-doc.setTextColor(16, 185, 129);
-doc.text('Sin eventos fuera de rango.', margin, yPos);
-yPos += 8;
-}
-
-if (yPos > 250) { doc.addPage(); yPos = 45; }
-doc.setFont('helvetica', 'bold');
-doc.setTextColor(0, 56, 77);
-doc.text('Eventos detectados (>10 min sin datos)', margin, yPos);
-yPos += 10;
-const wifiRows = [];
-const wifiStyles = {};
-document.querySelectorAll('#wifiTable tbody tr').forEach((tr, idx) => {
-    const cells = Array.from(tr.cells).map((td, cIdx) => {
-        if (cIdx === 6) { // Columna Observaciones
-            const input = td.querySelector('input');
-            return input ? cleanTextForPDF(input.value) : '';
+    if (yPos > 250) { doc.addPage(); yPos = 45; }
+    doc.setFontSize(12);
+    const alertRows = [];
+    document.querySelectorAll('#alertTable tbody tr').forEach((tr, idx) => {
+        const cells = Array.from(tr.cells).map((td, cIdx) => {
+            if (cIdx === 4) { // Columna Observaciones
+                const input = td.querySelector('input');
+                return input ? cleanTextForPDF(input.value) : '';
+            }
+            return cleanTextForPDF(td.innerText);
+        });
+        if (cells.length === 5 && !cells[0].toLowerCase().includes('sin eventos')) {
+            alertRows.push(cells);
         }
-        return cleanTextForPDF(td.innerText);
     });
-    if (cells.length === 7 && !cells[0].toLowerCase().includes('sin interrupciones')) {
-        wifiRows.push(cells);
-        if (cells[2].toLowerCase().includes('energia')) {
-            wifiStyles[idx] = { textColor: [220, 38, 38] };
-        }
+    if (alertRows.length > 0) {
+        doc.autoTable({
+            startY: yPos,
+            head: [['Fecha y Hora', 'Valor', 'Estado', 'Duración', 'Observaciones']],
+            body: alertRows,
+            theme: 'grid',
+            styles: { fontSize: 8, cellPadding: 2 },
+            headStyles: { fillColor: [241, 245, 249], textColor: [30, 41, 59], fontStyle: 'bold' },
+            margin: { top: 40, bottom: 30, left: margin, right: margin }
+        });
+        yPos = doc.lastAutoTable.finalY + 10;
+
+    // Análisis y Recomendaciones de Alertas
+    yPos = checkPageBreak(doc, yPos, 40);
+    doc.setFontSize(11);
+    doc.setFont('helvetica', 'bold');
+    doc.setTextColor(0, 56, 77);
+    doc.text('ANALISIS TECNICO:', margin, yPos);
+    yPos += 7;
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(9);
+    doc.setTextColor(30, 41, 59);
+    const analisisAlertas = generarAnalisisAlertas(alertRows.map(r => ({ estado: r[2], duracion: parseDurationToMinutes(r[3]) })));
+    const splitAnalisis = doc.splitTextToSize(analisisAlertas, pageWidth - (margin * 2));
+    doc.text(splitAnalisis, margin, yPos);
+    yPos += (splitAnalisis.length * 5) + 5;
+
+    yPos = checkPageBreak(doc, yPos, 40);
+    doc.setFontSize(11);
+    doc.setFont('helvetica', 'bold');
+    doc.setTextColor(0, 56, 77);
+    doc.text('RECOMENDACIONES:', margin, yPos);
+    yPos += 7;
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(9);
+    doc.setTextColor(30, 41, 59);
+    const recomAlertas = generarRecomendacionesAlertas(alertRows.map(r => ({ estado: r[2], duracion: parseDurationToMinutes(r[3]) })));
+    const splitRecom = doc.splitTextToSize(recomAlertas, pageWidth - (margin * 2));
+    doc.text(splitRecom, margin, yPos);
+    yPos += (splitRecom.length * 5) + 10;
+
+    } else {
+    doc.setFont('helvetica', 'normal');
+    doc.setTextColor(16, 185, 129);
+    doc.text('Sin eventos fuera de rango.', margin, yPos);
+    yPos += 8;
     }
-});
-if (wifiRows.length > 0) {
-    doc.autoTable({
-        startY: yPos,
-        head: [['Inicio', 'Fin', 'Tipo de Corte', 'Temp. Antes', 'Temp. Despues', 'Duracion', 'Observaciones']],
-        body: wifiRows,
-        theme: 'grid',
-        styles: { fontSize: 8, cellPadding: 2 },
-        headStyles: { fillColor: [241, 245, 249], textColor: [30, 41, 59], fontStyle: 'bold' },
-        margin: { top: 40, bottom: 30, left: margin, right: margin },
-didParseCell: function(data) {
-if (data.section === 'body' && wifiStyles[data.row.index]) {
-data.cell.styles.textColor = wifiStyles[data.row.index].textColor;
-}
-}
-});
-yPos = doc.lastAutoTable.finalY + 10;
-} else {
-doc.setFont('helvetica', 'normal');
-doc.setTextColor(16, 185, 129);
-doc.text('Sin interrupciones >10 min.', margin, yPos);
-yPos += 8;
-}
 
-// Análisis y Recomendaciones de WiFi
-yPos = checkPageBreak(doc, yPos, 40);
-doc.setFontSize(11);
-doc.setFont('helvetica', 'bold');
-doc.setTextColor(0, 56, 77);
-doc.text('ANALISIS TECNICO (CONECTIVIDAD):', margin, yPos);
-yPos += 7;
-doc.setFont('helvetica', 'normal');
-doc.setFontSize(9);
-doc.setTextColor(30, 41, 59);
-const analisisWifi = generarAnalisisEventos(wifiRows.map(r => ({ tipo: r[2], duracion: parseDurationToMinutes(r[5]) })));
-const splitAnalisisWifi = doc.splitTextToSize(analisisWifi, pageWidth - (margin * 2));
-doc.text(splitAnalisisWifi, margin, yPos);
-yPos += (splitAnalisisWifi.length * 5) + 5;
+    if (yPos > 250) { doc.addPage(); yPos = 45; }
+    doc.setFont('helvetica', 'bold');
+    doc.setTextColor(0, 56, 77);
+    doc.text('Eventos detectados (>10 min sin datos)', margin, yPos);
+    yPos += 10;
+    const wifiRows = [];
+    const wifiStyles = {};
+    document.querySelectorAll('#wifiTable tbody tr').forEach((tr, idx) => {
+        const cells = Array.from(tr.cells).map((td, cIdx) => {
+            if (cIdx === 6) { // Columna Observaciones
+                const input = td.querySelector('input');
+                return input ? cleanTextForPDF(input.value) : '';
+            }
+            return cleanTextForPDF(td.innerText);
+        });
+        if (cells.length === 7 && !cells[0].toLowerCase().includes('sin interrupciones')) {
+            wifiRows.push(cells);
+            if (cells[2].toLowerCase().includes('energia')) {
+                wifiStyles[idx] = { textColor: [220, 38, 38] };
+            }
+        }
+    });
+    if (wifiRows.length > 0) {
+        doc.autoTable({
+            startY: yPos,
+            head: [['Inicio', 'Fin', 'Tipo de Corte', 'Temp. Antes', 'Temp. Después', 'Duración', 'Observaciones']],
+            body: wifiRows,
+            theme: 'grid',
+            styles: { fontSize: 8, cellPadding: 2 },
+            headStyles: { fillColor: [241, 245, 249], textColor: [30, 41, 59], fontStyle: 'bold' },
+            margin: { top: 40, bottom: 30, left: margin, right: margin },
+            didParseCell: function(data) {
+                if (data.section === 'body' && wifiStyles[data.row.index]) {
+                    data.cell.styles.textColor = wifiStyles[data.row.index].textColor;
+                }
+            }
+        });
+        yPos = doc.lastAutoTable.finalY + 10;
+    } else {
+    doc.setFont('helvetica', 'normal');
+    doc.setTextColor(16, 185, 129);
+    doc.text('Sin interrupciones >10 min.', margin, yPos);
+    yPos += 8;
+    }
 
-yPos = checkPageBreak(doc, yPos, 40);
-doc.setFontSize(11);
-doc.setFont('helvetica', 'bold');
-doc.setTextColor(0, 56, 77);
-doc.text('RECOMENDACIONES DE CONECTIVIDAD:', margin, yPos);
-yPos += 7;
-doc.setFont('helvetica', 'normal');
-doc.setFontSize(9);
-doc.setTextColor(30, 41, 59);
-const recomWifi = generarRecomendacionesEventos(wifiRows.map(r => ({ tipo: r[2], duracion: r[5] })));
-const splitRecomWifi = doc.splitTextToSize(recomWifi, pageWidth - (margin * 2));
-doc.text(splitRecomWifi, margin, yPos);
-yPos += (splitRecomWifi.length * 5) + 10;
+    // Análisis y Recomendaciones de WiFi
+    yPos = checkPageBreak(doc, yPos, 40);
+    doc.setFontSize(11);
+    doc.setFont('helvetica', 'bold');
+    doc.setTextColor(0, 56, 77);
+    doc.text('ANALISIS TECNICO (CONECTIVIDAD):', margin, yPos);
+    yPos += 7;
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(9);
+    doc.setTextColor(30, 41, 59);
+    const analisisWifi = generarAnalisisEventos(wifiRows.map(r => ({ tipo: r[2], duracion: parseDurationToMinutes(r[5]) })));
+    const splitAnalisisWifi = doc.splitTextToSize(analisisWifi, pageWidth - (margin * 2));
+    doc.text(splitAnalisisWifi, margin, yPos);
+    yPos += (splitAnalisisWifi.length * 5) + 5;
 
-// --- NOTA TÉCNICA FINAL ---
-yPos = checkPageBreak(doc, yPos, 30);
-doc.setFontSize(9);
-doc.setFont('helvetica', 'bold');
-doc.setTextColor(71, 85, 105);
-doc.text('NOTA TECNICA:', margin, yPos);
-yPos += 6;
-doc.setFont('helvetica', 'italic');
-doc.setFontSize(7.5);
-const notaTecnica = cleanTextForPDF(
-  'Ante cualquier desvio termico o falla del equipo, la intervencion correctiva debe ser realizada por personal tecnico calificado ' +
-  '(Tecnico en Refrigeracion matriculado o servicio tecnico autorizado por el fabricante). ' +
-  'Ante fallas persistentes, contactar al Tecnico en Refrigeracion habilitado y notificar a la Jefatura segun corresponda. ' +
-  'Toda intervencion debe quedar documentada con fecha, descripcion y firma del responsable, ' +
-  'conforme a la Disposicion ANMAT 10.872/2020 y las Buenas Practicas de Almacenamiento (Resolucion ANMAT 368/2000).'
-);
-const splitNota = doc.splitTextToSize(notaTecnica, pageWidth - (margin * 2));
-doc.text(splitNota, margin, yPos);
-yPos += (splitNota.length * 4.5) + 6;
+    yPos = checkPageBreak(doc, yPos, 40);
+    doc.setFontSize(11);
+    doc.setFont('helvetica', 'bold');
+    doc.setTextColor(0, 56, 77);
+    doc.text('RECOMENDACIONES DE CONECTIVIDAD:', margin, yPos);
+    yPos += 7;
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(9);
+    doc.setTextColor(30, 41, 59);
+    const recomWifi = generarRecomendacionesEventos(wifiRows.map(r => ({ tipo: r[2], duracion: r[5] })));
+    const splitRecomWifi = doc.splitTextToSize(recomWifi, pageWidth - (margin * 2));
+    doc.text(splitRecomWifi, margin, yPos);
+    yPos += (splitRecomWifi.length * 5) + 10;
 
-// --- NOTA DE RESPONSABILIDAD ---
-yPos = checkPageBreak(doc, yPos, 25);
-doc.setFontSize(9);
-doc.setFont('helvetica', 'bold');
-doc.setTextColor(71, 85, 105);
-doc.text('RESPONSABILIDAD:', margin, yPos);
-yPos += 6;
-doc.setFont('helvetica', 'italic');
-doc.setFontSize(7.5);
-const notaResp = cleanTextForPDF(
-  'La responsabilidad del cumplimiento de las condiciones de conservacion y de la cadena de frio en el sector Farmacia ' +
-  'recae sobre la Jefatura de Farmacia, conforme a la Ley Nacional 17.565 y la Disposicion ANMAT 10.872/2020. ' +
-  'Ante cualquier incidente, el responsable del sector debe ser notificado de forma inmediata.'
-);
-const splitResp = doc.splitTextToSize(notaResp, pageWidth - (margin * 2));
-doc.text(splitResp, margin, yPos);
-yPos += (splitResp.length * 4.5) + 6;
+    // --- NOTA TÉCNICA FINAL ---
+    yPos = checkPageBreak(doc, yPos, 30);
+    doc.setFontSize(9);
+    doc.setFont('helvetica', 'bold');
+    doc.setTextColor(71, 85, 105);
+    doc.text('NOTA TECNICA:', margin, yPos);
+    yPos += 6;
+    doc.setFont('helvetica', 'italic');
+    doc.setFontSize(7.5);
+    const notaTecnica = cleanTextForPDF(
+      'Ante cualquier desvio termico o falla del equipo, la intervencion correctiva debe ser realizada por personal tecnico calificado ' +
+      '(Tecnico en Refrigeracion matriculado o servicio tecnico autorizado por el fabricante). ' +
+      'Ante fallas persistentes, contactar al Tecnico en Refrigeracion habilitado y notificar a la Jefatura segun corresponda. ' +
+      'Toda intervencion debe quedar documentada con fecha, descripcion y firma del responsable, ' +
+      'conforme a la Disposicion ANMAT 10.872/2020 y las Buenas Practicas de Almacenamiento (Resolucion ANMAT 368/2000).'
+    );
+    const splitNota = doc.splitTextToSize(notaTecnica, pageWidth - (margin * 2));
+    doc.text(splitNota, margin, yPos);
+    yPos += (splitNota.length * 4.5) + 6;
+
+    // --- NOTA DE RESPONSABILIDAD ---
+    yPos = checkPageBreak(doc, yPos, 25);
+    doc.setFontSize(9);
+    doc.setFont('helvetica', 'bold');
+    doc.setTextColor(71, 85, 105);
+    doc.text('RESPONSABILIDAD:', margin, yPos);
+    yPos += 6;
+    doc.setFont('helvetica', 'italic');
+    doc.setFontSize(7.5);
+    const notaResp = cleanTextForPDF(
+      'La responsabilidad del cumplimiento de las condiciones de conservacion y de la cadena de frio en el sector Farmacia ' +
+      'recae sobre la Jefatura de Farmacia, conforme a la Ley Nacional 17.565 y la Disposicion ANMAT 10.872/2020. ' +
+      'Ante cualquier incidente, el responsable del sector debe ser notificado de forma inmediata.'
+    );
+    const splitResp = doc.splitTextToSize(notaResp, pageWidth - (margin * 2));
+    doc.text(splitResp, margin, yPos);
+    yPos += (splitResp.length * 4.5) + 6;
 
     drawHeaderFooter(doc);
     const safeName = sensorName.replace(/[^a-zA-Z0-9]/g, '_');
@@ -672,9 +694,10 @@ yPos += (splitResp.length * 4.5) + 6;
     alert("Error al generar el PDF.");
   }
 }
+
 function formatDurationFull(minutesFloat) {
 const totalSeconds = Math.round(minutesFloat * 60);
-const d = Math.floor(totalSeconds / 86400);
+const d = Math.floor((totalSeconds / 86400));
 const h = Math.floor((totalSeconds % 86400) / 3600);
 const m = Math.floor((totalSeconds % 3600) / 60);
 const s = totalSeconds % 60;
@@ -685,6 +708,7 @@ if (m > 0) parts.push(`${m} min`);
 if (s > 0 || parts.length === 0) parts.push(`${s} seg`);
 return parts.join(' ');
 }
+
 function setupDaySelector() {
     document.querySelectorAll('.btn-day').forEach(btn => {
         btn.addEventListener('click', () => {
@@ -731,265 +755,343 @@ function applyRange() {
     document.querySelectorAll('.btn-day').forEach(b => b.classList.remove('active'));
     run(null);
 }
+
 async function run(days) {
-try {
-document.getElementById('loading').style.display = 'block';
-document.getElementById('content').style.display = 'none';
-    let url;
-    if (CUSTOM_START && CUSTOM_END) {
-        url = `https://api.thingspeak.com/channels/${ID}/feeds.json?api_key=${KEY}&start=${CUSTOM_START}T00:00:00-03:00&end=${CUSTOM_END}T23:59:59-03:00`;
-    } else if (SELECTED_DATE) {
-        url = `https://api.thingspeak.com/channels/${ID}/feeds.json?api_key=${KEY}&start=${SELECTED_DATE}T00:00:00-03:00&end=${SELECTED_DATE}T23:59:59-03:00`;
-    } else {
-        url = `https://api.thingspeak.com/channels/${ID}/feeds.json?api_key=${KEY}&minutes=${days * 1440}`;
-    }
-const res = await fetch(url);
-const data = await res.json();
-if (!data.feeds || data.feeds.length === 0) {
-document.getElementById('status').innerText = "Sin datos en este rango.";
-return;
-}
-document.getElementById('sensorName').innerText = data.channel[FIELD] || "Sensor";
-const teamNameEl = document.getElementById('teamName');
-teamNameEl.innerHTML = `Farmacia 💊: ${data.channel.name || "Sin nombre"}`;
-teamNameEl.className = "tag farmacia-tag";
-currentFeeds = data.feeds.filter(f => parseFloat(f[FIELD]) !== -127);
-if (currentFeeds.length === 0) {
-document.getElementById('status').innerText = "Sin datos validos (lecturas de error filtradas).";
-return;
-}
-const labels = currentFeeds.map(f => formatDate(f.created_at));
-const values = currentFeeds.map(f => parseFloat(f[FIELD]));
-drawChart(labels, values, data.channel[FIELD] || "Valor");
-fillAlerts(currentFeeds, FIELD);
-fillWifi(currentFeeds, FIELD);
-document.getElementById('loading').style.display = 'none';
-document.getElementById('content').style.display = 'block';
-} catch (e) {
-document.getElementById('status').innerText = "Error al cargar datos.";
-}
-}
-function drawChart(labels, values, label) {
-const ctx = document.getElementById('chart').getContext('2d');
-if (chartInstance) chartInstance.destroy();
-chartInstance = new Chart(ctx, {
-type: 'line',
-data: {
-labels,
-datasets: [{
-label,
-data: values,
-borderColor: '#3b82f6',
-backgroundColor: 'rgba(59,130,246,0.1)',
-borderWidth: 2,
-pointRadius: 0,
-tension: 0.3,
-fill: true
-}]
-},
-options: {
-responsive: true,
-maintainAspectRatio: false,
-scales: { y: { beginAtZero: false } }
-}
-});
-}
-function fillAlerts(feeds, field) {
-const tbody = document.querySelector('#alertTable tbody');
-let lastState = 'normal';
-let startTime = null;
-let rows = '';
-let alertData = [];
+  document.getElementById('loading').style.display = 'block';
+  document.getElementById('content').style.display = 'none';
+  document.getElementById('errorContainer').style.display = 'none';
 
-feeds.forEach(f => {
-    const val = parseFloat(f[field]);
-    if (isNaN(val)) return;
-    const state = (val > MAX) ? 'high' : (val < MIN) ? 'low' : 'normal';
-    if (state !== lastState) {
-        if (state !== 'normal') {
-            startTime = f.created_at;
-            const label = state === 'high' ? '🔥 Alta (riesgo de pérdida)' : '❄️ Baja (riesgo de congelación)';
-            const obsId = `alerta_${f.created_at}`;
-            const valorGuardado = observacionesAlmacenadas[obsId] || '';
-            const inputHtml = `<td><input type="text" style="width:100%; border:1px solid #ddd; border-radius:4px; padding:2px 4px;" value="${valorGuardado.replace(/"/g, '&quot;')}" placeholder="Nota..." onchange="guardarObservacion(this, '${obsId}')"></td>`;
-            rows += `<tr class="row-alert"><td>${formatDateTime(f.created_at)}</td><td>${val.toFixed(1)}</td><td>${label}</td><td>--</td>${inputHtml}</tr>`;
-        } else if (startTime) {
-            const dur = (new Date(f.created_at) - new Date(startTime)) / 60000;
-            const obsId = `recuperacion_${f.created_at}`;
-            const valorGuardado = observacionesAlmacenadas[obsId] || '';
-            const inputHtml = `<td><input type="text" style="width:100%; border:1px solid #ddd; border-radius:4px; padding:2px 4px;" value="${valorGuardado.replace(/"/g, '&quot;')}" placeholder="Nota..." onchange="guardarObservacion(this, '${obsId}')"></td>`;
-            rows += `<tr><td>${formatDateTime(f.created_at)}</td><td>${val.toFixed(1)}</td><td>✅ Recuperación</td><td>${formatDurationFull(dur)}</td>${inputHtml}</tr>`;
-            alertData.push({ estado: lastState, duracion: dur });
+  if (!ID || !KEY) {
+    document.getElementById('status').innerText = "Error: ID de canal o API Key no proporcionados.";
+    return;
+  }
+
+  let url;
+  if (CUSTOM_START && CUSTOM_END) {
+    url = `https://api.thingspeak.com/channels/${ID}/feeds.json?api_key=${KEY}&start=${CUSTOM_START}T00:00:00-03:00&end=${CUSTOM_END}T23:59:59-03:00`;
+  } else if (SELECTED_DATE) {
+    url = `https://api.thingspeak.com/channels/${ID}/feeds.json?api_key=${KEY}&start=${SELECTED_DATE}T00:00:00-03:00&end=${SELECTED_DATE}T23:59:59-03:00`;
+  } else {
+    url = `https://api.thingspeak.com/channels/${ID}/feeds.json?api_key=${KEY}&minutes=${days * 1440}`;
+  }
+
+  try {
+    const res = await fetch(url);
+    const data = await res.json();
+
+    if (!data.feeds || data.feeds.length === 0) {
+      document.getElementById('status').innerText = "Sin datos en este rango.";
+      return;
+    }
+
+    document.getElementById('sensorName').innerText = data.channel[FIELD] || "Sensor";
+    const teamNameEl = document.getElementById('teamName');
+    teamNameEl.innerHTML = `Farmacia 💊: ${data.channel.name || "Sin nombre"}`;
+    teamNameEl.className = "tag farmacia-tag";
+
+    currentFeeds = data.feeds.filter(f => parseFloat(f[FIELD]) !== -127);
+
+    if (currentFeeds.length === 0) {
+      document.getElementById('status').innerText = "Sin datos validos (lecturas de error filtradas).";
+      return;
+    }
+
+    const labels = currentFeeds.map(f => formatDate(f.created_at));
+    const values = currentFeeds.map(f => parseFloat(f[FIELD]));
+
+    // Actualizar fecha de emisión
+    document.getElementById('issueDate').innerText = new Date().toLocaleDateString('es-AR');
+
+    if (chartInstance) {
+      chartInstance.destroy();
+    }
+
+    const ctx = document.getElementById('chart').getContext('2d');
+    chartInstance = new Chart(ctx, {
+      type: 'line',
+      data: {
+        labels: labels,
+        datasets: [{
+          label: 'Temperatura (°C)',
+          data: values,
+          borderColor: '#00384d',
+          backgroundColor: 'rgba(0, 56, 77, 0.1)',
+          borderWidth: 2,
+          pointRadius: 0,
+          fill: true
+        }]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        scales: {
+          x: {
+            type: 'time',
+            time: {
+              unit: 'hour',
+              tooltipFormat: 'dd/MM/yyyy HH:mm',
+              displayFormats: {
+                hour: 'HH:mm'
+              }
+            },
+            title: {
+              display: true,
+              text: 'Fecha y Hora'
+            }
+          },
+          y: {
+            title: {
+              display: true,
+              text: 'Temperatura (°C)'
+            },
+            min: 0,
+            max: 10,
+            ticks: {
+              stepSize: 1
+            },
+            // Añadir líneas de referencia para los límites de temperatura
+            afterBuildTicks: function(axis) {
+              axis.ticks.push({ value: MIN, label: MIN + '°C (Min)' });
+              axis.ticks.push({ value: MAX, label: MAX + '°C (Max)' });
+            }
+          }
+        },
+        plugins: {
+          annotation: {
+            annotations: {
+              minLine: {
+                type: 'line',
+                yMin: MIN,
+                yMax: MIN,
+                borderColor: 'blue',
+                borderWidth: 1,
+                borderDash: [5, 5],
+                label: {
+                  content: 'Mínimo',
+                  enabled: true,
+                  position: 'start'
+                }
+              },
+              maxLine: {
+                type: 'line',
+                yMin: MAX,
+                yMax: MAX,
+                borderColor: 'red',
+                borderWidth: 1,
+                borderDash: [5, 5],
+                label: {
+                  content: 'Máximo',
+                  enabled: true,
+                  position: 'start'
+                }
+              }
+            }
+          },
+          tooltip: {
+            callbacks: {
+              title: function(context) {
+                return moment(context[0].parsed.x).format('DD/MM/YYYY HH:mm');
+              },
+              label: function(context) {
+                return `Temperatura: ${context.parsed.y}°C`;
+              }
+            }
+          }
         }
-        lastState = state;
-    }
-});
-tbody.innerHTML = rows || '<tr><td colspan="5" class="empty">✅ Sin eventos fuera de rango.</td></tr>';
-
-// Llenar boxes de análisis
-const analisisCont = document.getElementById('analisisAlertasContenido');
-const recomCont = document.getElementById('recomendacionesAlertasContenido');
-const analisisBox = document.getElementById('analisisAlertas');
-const recomBox = document.getElementById('recomendacionesAlertas');
-
-if (alertData.length > 0) {
-    analisisCont.innerText = generarAnalisisAlertas(alertData);
-    recomCont.innerText = generarRecomendacionesAlertas(alertData);
-    analisisBox.style.display = 'block';
-    recomBox.style.display = 'block';
-} else {
-    analisisCont.innerText = "No se registraron desvíos de temperatura en el período analizado. El equipo se mantuvo dentro del rango óptimo (2°C - 8°C).";
-    recomCont.innerText = "• Continuar con el monitoreo habitual.\n• Mantener registro actualizado de temperaturas.\n• Realizar mantenimiento preventivo según calendario.";
-    analisisBox.style.display = 'block';
-    recomBox.style.display = 'block';
-}
-}
-function fillWifi(feeds, field) {
-const tbody = document.querySelector('#wifiTable tbody');
-let rows = '';
-let wifiData = [];
-for (let i = 1; i < feeds.length; i++) {
-    const diff = (new Date(feeds[i].created_at) - new Date(feeds[i-1].created_at)) / 60000;
-    if (diff > WIFI_CUTOFF) {
-        const type = parseFloat(feeds[i][field]) > MAX || parseFloat(feeds[i][field]) < MIN ? '⚡ Corte de Energía' : '📶 Corte de WiFi';
-        const obsId = `wifi_${feeds[i].created_at}`;
-        const valorGuardado = observacionesAlmacenadas[obsId] || '';
-        const inputHtml = `<td><input type="text" style="width:100%; border:1px solid #ddd; border-radius:4px; padding:2px 4px;" value="${valorGuardado.replace(/"/g, '&quot;')}" placeholder="Nota..." onchange="guardarObservacion(this, '${obsId}')"></td>`;
-        rows += `<tr><td>${formatDateTime(feeds[i-1].created_at)}</td><td>${formatDateTime(feeds[i].created_at)}</td><td>${type}</td><td>${feeds[i-1][field]}°C</td><td>${feeds[i][field]}°C</td><td>${formatDurationFull(diff)}</td>${inputHtml}</tr>`;
-        wifiData.push({ tipo: type, duracion: diff });
-    }
-}
-tbody.innerHTML = rows || '<tr><td colspan="7" class="empty">✅ Sin interrupciones >10 min.</td></tr>';
-
-// Llenar boxes de análisis de conectividad
-const analisisWifiCont = document.getElementById('analisisWifiContenido');
-const recomWifiCont = document.getElementById('recomendacionesWifiContenido');
-const analisisWifiBox = document.getElementById('analisisWifi');
-const recomWifiBox = document.getElementById('recomendacionesWifi');
-
-if (wifiData.length > 0) {
-    analisisWifiCont.innerText = generarAnalisisEventos(wifiData);
-    recomWifiCont.innerText = generarRecomendacionesEventos(wifiData);
-    analisisWifiBox.style.display = 'block';
-    recomWifiBox.style.display = 'block';
-} else {
-    analisisWifiCont.innerText = "No se detectaron interrupciones de conectividad significativas.";
-    recomWifiCont.innerText = "• Verificar el estado del router y la conexión a internet.\n• Revisar la distancia entre el sensor y el punto de acceso WiFi.\n• Mantener actualizado el firmware del sensor.";
-    analisisWifiBox.style.display = 'block';
-    recomWifiBox.style.display = 'block';
-}
-}
-function formatDate(iso) {
-const d = new Date(iso);
-return `${d.getDate()}/${d.getMonth() + 1} ${d.getHours()}:${String(d.getMinutes()).padStart(2,'0')}`;
-}
-function formatDateTime(iso) {
-const d = new Date(iso);
-return `${d.getDate()}/${d.getMonth() + 1}/${d.getFullYear()} ${d.getHours()}:${String(d.getMinutes()).padStart(2,'0')}`;
-}
-
-// ============================================================
-// FUNCIONES DE ANÁLISIS Y RECOMENDACIONES (Vicus Farmacia)
-// ============================================================
-function generarAnalisisAlertas(eventos) {
-    if (!eventos || eventos.length === 0) {
-        return "No se registraron desvíos de temperatura en el período analizado. El equipo se mantuvo dentro del rango óptimo (2°C - 8°C).";
-    }
-    let totalDuracion = 0;
-    let alertasAltas = 0;
-    let alertasBajas = 0;
-    eventos.forEach(evento => {
-        const duracion = parseFloat(evento.duracion) || 0;
-        totalDuracion += duracion;
-        if (evento.estado.toLowerCase().includes('alta')) alertasAltas++;
-        else if (evento.estado.toLowerCase().includes('baja')) alertasBajas++;
+      }
     });
-    let analisis = `Se detectaron ${eventos.length} evento(s) de temperatura fuera de rango.\n`;
-    analisis += `• Alertas por temperatura alta: ${alertasAltas}\n`;
-    analisis += `• Alertas por temperatura baja: ${alertasBajas}\n`;
-    analisis += `• Tiempo total acumulado fuera de rango: ${formatDurationFull(totalDuracion)}\n\n`;
-    if (totalDuracion < 30) {
-        analisis += "Los desvíos fueron breves y no representan un riesgo crítico para la cadena de frío. Se recomienda monitorear de cerca las próximas horas.";
-    } else if (totalDuracion < 120) {
-        analisis += "Se registraron desvíos de moderada duración. Es posible que algunos medicamentos hayan sido afectados. Se requiere revisión de protocolos.";
-    } else {
-        analisis += "Los desvíos fueron prolongados y representan un riesgo significativo. Se requiere evaluación técnica inmediata y posible descarte de medicamentos afectados.";
-    }
-    return analisis;
+
+    // Llenar tablas y análisis
+    populateAlertTable(currentFeeds, FIELD);
+    populateWifiTable(currentFeeds, FIELD);
+
+    document.getElementById('loading').style.display = 'none';
+    document.getElementById('content').style.display = 'block';
+
+  } catch (error) {
+    console.error('Error al cargar datos:', error);
+    document.getElementById('status').innerText = "Error al cargar datos. Intente de nuevo.";
+    document.getElementById('errorContainer').innerText = `Error: ${error.message}`;
+    document.getElementById('errorContainer').style.display = 'block';
+    document.getElementById('loading').style.display = 'none';
+  }
 }
 
-function generarRecomendacionesAlertas(eventos) {
-    if (!eventos || eventos.length === 0) {
-        return "• Continuar con el monitoreo habitual.\n• Mantener registro actualizado de temperaturas.\n• Realizar mantenimiento preventivo según calendario.";
-    }
-    const tieneAltas = eventos.some(e => e.estado.toLowerCase().includes('alta'));
-    const tieneBajas = eventos.some(e => e.estado.toLowerCase().includes('baja'));
-    let recomendaciones = [];
-
-    if (tieneAltas) {
-        recomendaciones.push("• Temperatura ALTA (>8°C): verificar el sistema de refrigeración y estado del compresor.");
-        recomendaciones.push("• Controlar el sellado hermético de puertas y burletes del equipo.");
-        recomendaciones.push("• Evaluar la aptitud de los medicamentos afectados según protocolo vigente (Disposición ANMAT 10.872/2020).");
-    }
-    if (tieneBajas) {
-        recomendaciones.push("• Temperatura BAJA (<2°C): revisar la configuración del termostato del equipo.");
-        recomendaciones.push("• Verificar que los medicamentos no estén en contacto directo con el evaporador.");
-        recomendaciones.push("• Controlar que la puerta no haya quedado abierta en ambiente frío.");
-    }
-    recomendaciones.push("• Controlar la calibración del sensor contra un termómetro patrón certificado.");
-    recomendaciones.push("• Documentar el evento en el registro de incidencias de cadena de frío.");
-    recomendaciones.push("• Evaluar la necesidad de respaldo eléctrico (UPS) para el equipo de refrigeración.");
-    return recomendaciones.join('\n');
+function formatDate(dateString) {
+  const date = new Date(dateString);
+  return date.toLocaleDateString('es-AR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' });
 }
 
-function generarAnalisisEventos(eventos) {
-    if (!eventos || eventos.length === 0) return "No se detectaron interrupciones de conectividad significativas. Monitoreo continuo confirmado.";
-    let totalDuracion = 0;
-    eventos.forEach(e => { totalDuracion += parseFloat(e.duracion) || 0; });
-    const n = eventos.length;
-    let analisis = `Se ${n === 1 ? 'detectó' : 'detectaron'} ${n} ${n === 1 ? 'interrupción' : 'interrupciones'} de datos.\n`;
-    analisis += `• Tiempo total sin datos: ${formatDurationFull(totalDuracion)}\n`;
-    analisis += `• Durante los períodos sin datos no se puede garantizar el control de la cadena de frío.\n\n`;
-    if (totalDuracion < 60) {
-        analisis += "Los cortes fueron breves y no afectaron significativamente el registro continuo.";
-    } else if (totalDuracion < 240) {
-        analisis += "Los cortes fueron de duración moderada. Se recomienda verificar las temperaturas registradas antes y después del corte.";
-    } else {
-        analisis += "Los cortes fueron prolongados. No se puede garantizar la integridad de la cadena de frío durante estos períodos. Requiere evaluación según Disposición ANMAT 10.872/2020.";
+function populateAlertTable(feeds, field) {
+  const tableBody = document.querySelector('#alertTable tbody');
+  tableBody.innerHTML = '';
+  let alertCount = 0;
+  let lastState = 'normal'; // 'normal', 'alta', 'baja'
+  let startTime = null;
+  let startValue = null;
+
+  feeds.forEach(f => {
+    const value = parseFloat(f[field]);
+    if (isNaN(value)) return;
+
+    const currentState = (value > MAX) ? 'alta' : (value < MIN) ? 'baja' : 'normal';
+    const formattedTime = new Date(f.created_at).toLocaleDateString('es-AR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' });
+
+    if (currentState !== lastState) {
+      if (lastState !== 'normal' && startTime !== null) { // Fin de una alerta
+        const durationMs = new Date(f.created_at).getTime() - startTime.getTime();
+        const durationMinutes = durationMs / (1000 * 60);
+        const row = tableBody.insertRow();
+        row.classList.add('row-alert');
+        row.insertCell().innerText = new Date(startTime).toLocaleDateString('es-AR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' });
+        row.insertCell().innerText = `${startValue}°C`;
+        row.insertCell().innerText = `Fin Alerta ${lastState.charAt(0).toUpperCase() + lastState.slice(1)}`;
+        row.insertCell().innerText = formatDurationFull(durationMinutes);
+        const obsCell = row.insertCell();
+        const obsInput = document.createElement('input');
+        obsInput.type = 'text';
+        obsInput.placeholder = 'Observaciones';
+        obsInput.value = observacionesAlmacenadas[`alert-${startTime.toISOString()}-${lastState}`] || '';
+        obsInput.onchange = () => guardarObservacion(obsInput, `alert-${startTime.toISOString()}-${lastState}`);
+        obsCell.appendChild(obsInput);
+        alertCount++;
+      }
+
+      if (currentState !== 'normal') { // Inicio de una alerta
+        startTime = new Date(f.created_at);
+        startValue = value;
+        const row = tableBody.insertRow();
+        row.classList.add('row-alert');
+        row.insertCell().innerText = formattedTime;
+        row.insertCell().innerText = `${value}°C`;
+        row.insertCell().innerText = `Inicio Alerta ${currentState.charAt(0).toUpperCase() + currentState.slice(1)}`;
+        row.insertCell().innerText = '--';
+        const obsCell = row.insertCell();
+        const obsInput = document.createElement('input');
+        obsInput.type = 'text';
+        obsInput.placeholder = 'Observaciones';
+        obsInput.value = observacionesAlmacenadas[`alert-${startTime.toISOString()}-${currentState}`] || '';
+        obsInput.onchange = () => guardarObservacion(obsInput, `alert-${startTime.toISOString()}-${currentState}`);
+        obsCell.appendChild(obsInput);
+      }
     }
-    return analisis;
+    lastState = currentState;
+  });
+
+  if (alertCount === 0) {
+    const row = tableBody.insertRow();
+    row.insertCell().innerText = 'Sin eventos fuera de rango.';
+    row.cells[0].colSpan = 5;
+    row.cells[0].classList.add('empty');
+  }
+
+  // Análisis y Recomendaciones
+  const analisisAlertasDiv = document.getElementById('analisisAlertas');
+  const recomendacionesAlertasDiv = document.getElementById('recomendacionesAlertas');
+  const analisisAlertasContenido = document.getElementById('analisisAlertasContenido');
+  const recomendacionesAlertasContenido = document.getElementById('recomendacionesAlertasContenido');
+
+  const alertasDetectadas = feeds.filter(f => {
+    const val = parseFloat(f[field]);
+    return val > MAX || val < MIN;
+  });
+
+  if (alertasDetectadas.length > 0) {
+    analisisAlertasDiv.style.display = 'block';
+    recomendacionesAlertasDiv.style.display = 'block';
+    let analisisTexto = 'Se detectaron desviaciones de temperatura en el período. ';
+    let recomendacionesTexto = 'Se recomienda revisar el funcionamiento del equipo y las condiciones de almacenamiento. ';
+
+    const altas = alertasDetectadas.filter(f => parseFloat(f[field]) > MAX).length;
+    const bajas = alertasDetectadas.filter(f => parseFloat(f[field]) < MIN).length;
+
+    if (altas > 0) {
+      analisisTexto += `Se registraron ${altas} lecturas por encima de ${MAX}°C.`;
+      recomendacionesTexto += 'Asegurar que la puerta del refrigerador esté bien cerrada y que no haya sobrecarga. ';
+    }
+    if (bajas > 0) {
+      analisisTexto += `Se registraron ${bajas} lecturas por debajo de ${MIN}°C.`;
+      recomendacionesTexto += 'Verificar el termostato y evitar aperturas prolongadas. ';
+    }
+    analisisAlertasContenido.innerText = analisisTexto;
+    recomendacionesAlertasContenido.innerText = recomendacionesTexto;
+  } else {
+    analisisAlertasDiv.style.display = 'none';
+    recomendacionesAlertasDiv.style.display = 'none';
+  }
 }
 
-function generarRecomendacionesEventos(eventos) {
-    if (!eventos || eventos.length === 0) {
-        return "• Mantener el equipo de red en condiciones óptimas para asegurar monitoreo continuo.\n• Verificar periódicamente la conectividad del sensor.";
+function populateWifiTable(feeds, field) {
+  const tableBody = document.querySelector('#wifiTable tbody');
+  tableBody.innerHTML = '';
+  let wifiCutoffCount = 0;
+  let lastTimestamp = null;
+  let lastValue = null;
+
+  for (let i = 0; i < feeds.length; i++) {
+    const f = feeds[i];
+    const currentTimestamp = new Date(f.created_at);
+    const currentValue = parseFloat(f[field]);
+
+    if (lastTimestamp !== null) {
+      const diffMinutes = (currentTimestamp.getTime() - lastTimestamp.getTime()) / (1000 * 60);
+
+      if (diffMinutes > WIFI_CUTOFF) {
+        wifiCutoffCount++;
+        const row = tableBody.insertRow();
+        row.insertCell().innerText = new Date(lastTimestamp).toLocaleDateString('es-AR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' });
+        row.insertCell().innerText = currentTimestamp.toLocaleDateString('es-AR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' });
+        
+        let tipoCorte = 'Corte de Conectividad';
+        if (currentValue > MAX || currentValue < MIN) {
+            tipoCorte = 'Corte de Energía/Falla Equipo';
+        }
+        row.insertCell().innerText = tipoCorte;
+        row.insertCell().innerText = lastValue !== null ? `${lastValue}°C` : '--';
+        row.insertCell().innerText = currentValue !== null ? `${currentValue}°C` : '--';
+        row.insertCell().innerText = formatDurationFull(diffMinutes);
+        const obsCell = row.insertCell();
+        const obsInput = document.createElement('input');
+        obsInput.type = 'text';
+        obsInput.placeholder = 'Observaciones';
+        obsInput.value = observacionesAlmacenadas[`wifi-${lastTimestamp.toISOString()}`] || '';
+        obsInput.onchange = () => guardarObservacion(obsInput, `wifi-${lastTimestamp.toISOString()}`);
+        obsCell.appendChild(obsInput);
+      }
     }
-    let totalDuracion = 0;
-    eventos.forEach(e => { totalDuracion += parseFloat(e.duracion) || 0; });
-    let recom = "• Verificar el estado del router y la conexión a internet.\n";
-    recom += "• Revisar la distancia entre el sensor y el punto de acceso WiFi.\n";
-    recom += "• Mantener actualizado el firmware del sensor.\n";
-    if (totalDuracion >= 60) {
-        recom += "• Implementar registro manual de temperatura durante períodos sin conectividad (exigido por normativa).\n";
-        recom += "• Evaluar instalación de UPS en el equipo de red para evitar cortes por falta de energía.";
-    }
-    return recom;
+    lastTimestamp = currentTimestamp;
+    lastValue = currentValue;
+  }
+
+  if (wifiCutoffCount === 0) {
+    const row = tableBody.insertRow();
+    row.insertCell().innerText = 'Sin interrupciones de conectividad mayores a 10 minutos.';
+    row.cells[0].colSpan = 7;
+    row.cells[0].classList.add('empty');
+  }
+
+  // Análisis y Recomendaciones de WiFi
+  const analisisWifiDiv = document.getElementById('analisisWifi');
+  const recomendacionesWifiDiv = document.getElementById('recomendacionesWifi');
+  const analisisWifiContenido = document.getElementById('analisisWifiContenido');
+  const recomendacionesWifiContenido = document.getElementById('recomendacionesWifiContenido');
+
+  if (wifiCutoffCount > 0) {
+    analisisWifiDiv.style.display = 'block';
+    recomendacionesWifiDiv.style.display = 'block';
+    analisisWifiContenido.innerText = `Se detectaron ${wifiCutoffCount} interrupciones de conectividad mayores a 10 minutos. Durante estos períodos, el monitoreo continuo no puede ser garantizado.`;
+    recomendacionesWifiContenido.innerText = 'Verificar la estabilidad de la red Wi-Fi y la alimentación eléctrica del sensor. Considerar la implementación de un sistema de respaldo de energía para el equipo de monitoreo.';
+  } else {
+    analisisWifiDiv.style.display = 'none';
+    recomendacionesWifiDiv.style.display = 'none';
+  }
 }
 
-function checkPageBreak(doc, yPos, espacioNecesario, marginTop = 45, marginBottom = 30) {
-    const pageHeight = doc.internal.pageSize.getHeight();
-    if (yPos + espacioNecesario > pageHeight - marginBottom) {
-        doc.addPage();
-        return marginTop;
-    }
-    return yPos;
-}
-
+window.onload = function() {
+  setupDaySelector();
+  setupDatePicker();
+  run(DAYS);
+};
 </script>
 </body>
 </html>
-
-
-
-
-
