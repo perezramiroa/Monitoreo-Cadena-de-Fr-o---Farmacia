@@ -1,4 +1,4 @@
-const CACHE_NAME = 'rsamio-v1.1.3';
+const CACHE_NAME = 'rsamio-v1.1.4';
 const PREFIX = '/Monitoreo-Cadena-de-Fr-o---Farmacia';
 const urlsToCache = [
   `${PREFIX}/`,
