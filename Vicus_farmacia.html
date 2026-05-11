@@ -647,9 +647,11 @@
       }
     }
     function del(id) {
-      db = db.filter(x => x.id != id);
-      save();
-      render();
+      if (confirm("¿Está seguro de que desea eliminar este dispositivo?")) {
+        db = db.filter(x => x.id != id);
+        save();
+        render();
+      }
     }
     function save() {
       localStorage.setItem('iot_db_farmacia', JSON.stringify(db));
