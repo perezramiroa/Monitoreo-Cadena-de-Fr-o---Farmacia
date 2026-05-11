@@ -9,6 +9,8 @@
 <meta name="theme-color" content="#00384d">
 <link rel="stylesheet" href="./css/pwa-styles.css">
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/moment@2.29.1/moment.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-moment@1.0.0/dist/chartjs-adapter-moment.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.25/jspdf.plugin.autotable.min.js"></script>
 <style>
@@ -796,7 +798,7 @@ async function run(days) {
       return;
     }
 
-    const labels = currentFeeds.map(f => formatDate(f.created_at));
+    const labels = currentFeeds.map(f => new Date(f.created_at));
     const values = currentFeeds.map(f => parseFloat(f[FIELD]));
 
     // Actualizar fecha de emisión
