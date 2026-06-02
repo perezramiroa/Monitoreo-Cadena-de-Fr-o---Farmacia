@@ -748,9 +748,10 @@
                 const notaTecnica = cleanTextForPDF(
                     'Ante cualquier desvio termico o falla del equipo, la intervencion correctiva debe ser realizada por personal tecnico calificado ' +
                     '(Tecnico en Refrigeracion matriculado o servicio tecnico autorizado por el fabricante). ' +
-                    'Ante fallas persistentes, contactar al Tecnico en Refrigeracion habilitado y notificar a la Jefatura segun corresponda. ' +
+                    'Ante fallas persistentes, contactar al Tecnico en Refrigeracion habilitado y notificar al Director Tecnico de Farmacia segun corresponda. ' +
                     'Toda intervencion debe quedar documentada con fecha, descripcion y firma del responsable, ' +
-                    'conforme a la Disposicion ANMAT 10.872/2020 y las Buenas Practicas de Almacenamiento (Resolucion ANMAT 368/2000).'
+                    'conforme a la Disposicion ANMAT 10.872/2020, la Disposicion ANMAT 2069/2018 (Buenas Practicas de Distribucion) ' +
+                    'y las Buenas Practicas de Almacenamiento (Resolucion ANMAT 368/2000).'
                 );
                 const splitNota = doc.splitTextToSize(notaTecnica, pageWidth - (margin * 2));
                 doc.text(splitNota, margin, yPos);
@@ -767,8 +768,9 @@
                 doc.setFontSize(7.5);
                 const notaResp = cleanTextForPDF(
                     'La responsabilidad del cumplimiento de las condiciones de conservacion y de la cadena de frio en el sector Farmacia ' +
-                    'recae sobre la Jefatura de Farmacia, conforme a la Ley Nacional 17.565 y la Disposicion ANMAT 10.872/2020. ' +
-                    'Ante cualquier incidente, el responsable del sector debe ser notificado de forma inmediata.'
+                    'recae sobre el Director Tecnico de Farmacia, conforme a la Ley Nacional 17.565 y su Decreto Reglamentario 7.123/68 ' +
+                    '(art. 10 inc. d), y la Disposicion ANMAT 10.872/2020. ' +
+                    'Ante cualquier incidente, el Director Tecnico debe ser notificado de forma inmediata.'
                 );
                 const splitResp = doc.splitTextToSize(notaResp, pageWidth - (margin * 2));
                 doc.text(splitResp, margin, yPos);
