@@ -690,7 +690,8 @@
 <div class="sensor-label" id="l-${c.id}-${f}">Cargando...</div>
 <div class="sensor-value" id="v-${c.id}-${f}">--</div>
 <button class="btn-info" id="info-${c.id}-${f}" onclick="mostrarAyudaAlerta(this)" style="display:none;" title="Ver recomendaciones">ⓘ ¿Qué hacer?</button>
-<button class="btn-hist" onclick="openRep('${c.id}','${c.k}','${f}','${c.type}')">📊 Gráfico</button>
+<button class="btn-hist" onclick="openRep('${c.id}','${c.k}','${f}','${c.type}')">📊 Historial</button>
+<div id="t-${c.id}-${f}" style="font-size:0.7rem;color:#64748b;text-align:center;margin-top:4px;"></div>
 `;
             grid.appendChild(fieldCard);
           });
@@ -757,7 +758,7 @@
               if (isNaN(fValue)) {
                 valueEl.innerHTML = `<span style="font-size:1rem;color:#94a3b8;">Sin datos</span>`;
               } else {
-                valueEl.innerHTML = `${fValue.toFixed(1)}°C<br><span style="font-size:0.7rem;color:#64748b;font-weight:400;">${timeStr}</span>`;
+                valueEl.innerText = fValue.toFixed(1) + '°C';
               }
               // Colorear según rango
               if (f === 'field1' || f === 'field2') {
@@ -768,6 +769,9 @@
                 }
               }
             }
+            // Hora de última lectura debajo del botón Historial
+            const timeEl = document.getElementById(`t-${c.id}-${f}`);
+            if (timeEl) timeEl.innerText = fTime ? `🕒 ${timeStr}` : '';
             // Actualizar estado de alerta
             const isDanger = (f === 'field1' || f === 'field2') && !isNaN(fValue) && (fValue > MAX || fValue < MIN);
             if (isDanger) {
