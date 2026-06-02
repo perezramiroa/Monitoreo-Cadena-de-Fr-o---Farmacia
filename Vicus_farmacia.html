@@ -408,7 +408,8 @@
   <div class="header">
     <div class="logo-bar">
       <div class="logo-item" style="width:100%;">
-        <img src="logos/logo_rih.jpg" alt="RIH" style="width:100%; height:100%; object-fit:contain;">
+        <img id="farmLogo" alt="RIH" style="width:100%; height:100%; object-fit:contain;">
+        <script>document.getElementById('farmLogo').src = 'logos/logo_rih.jpg?t=' + new Date().getTime();</script>
       </div>
     </div>
 
@@ -445,8 +446,9 @@
   <div id="app" class="device-list"></div>
   <div style="margin-top: 8px; text-align: center;">
     <div style="background-color: #00384d; padding: 6px 16px; border-top: 1px solid var(--border);">
-      <img src="logos/footer.jpg" alt="HNB - Provincia del Neuquén"
+      <img id="farmFooter" alt="HNB - Provincia del Neuquén"
         style="max-width: 100%; height: auto; display: inline-block;">
+      <script>document.getElementById('farmFooter').src = 'logos/footer.jpg?t=' + new Date().getTime();</script>
     </div>
   </div>
   <!-- Panel de Normativa (con formato idéntico a la captura de pantalla) -->
@@ -727,16 +729,39 @@
           // Para cada campo seleccionado
           for (let f of c.fields) {
             const fLabel = d.channel[f] || f;
-            const fValue = parseFloat(d.feeds[0][f]);
+
+            // Buscar última lectura válida ignorando -127 (error de hardware)
+            let fValue = NaN;
+            let fTime = null;
+            for (let i = d.feeds.length - 1; i >= 0; i--) {
+              const v = parseFloat(d.feeds[i][f]);
+              if (!isNaN(v) && v !== -127) {
+                fValue = v;
+                fTime = d.feeds[i].created_at;
+                break;
+              }
+            }
+
+            // Formatear hora de última lectura
+            let timeStr = '--';
+            if (fTime) {
+              const dt = new Date(fTime);
+              timeStr = `${dt.getDate()}/${dt.getMonth()+1} ${dt.getHours()}:${String(dt.getMinutes()).padStart(2,'0')}`;
+            }
+
             // Actualizar etiqueta y valor
             const labelEl = document.getElementById(`l-${c.id}-${f}`);
             const valueEl = document.getElementById(`v-${c.id}-${f}`);
             if (labelEl) labelEl.innerText = fLabel;
             if (valueEl) {
-              valueEl.innerText = isNaN(fValue) ? '--' : fValue.toFixed(1);
+              if (isNaN(fValue)) {
+                valueEl.innerHTML = `<span style="font-size:1rem;color:#94a3b8;">Sin datos</span>`;
+              } else {
+                valueEl.innerHTML = `${fValue.toFixed(1)}°C<br><span style="font-size:0.7rem;color:#64748b;font-weight:400;">${timeStr}</span>`;
+              }
               // Colorear según rango
-              if (f === 'field1' || f === 'field2') { // asumimos temperaturas
-                if (fValue < MIN || fValue > MAX) {
+              if (f === 'field1' || f === 'field2') {
+                if (!isNaN(fValue) && (fValue < MIN || fValue > MAX)) {
                   valueEl.classList.add('danger');
                 } else {
                   valueEl.classList.remove('danger');
