@@ -195,8 +195,9 @@
     <div class="header">
         <div class="logo-bar">
             <div class="logo-item" style="width:100%;">
-                <img id="webLogo2" src="logos/logo_rih.jpg" alt="RIH"
+                <img id="webLogo2" alt="RIH"
                     style="width:100%; height:100%; object-fit:contain;">
+                <script>document.getElementById('webLogo2').src = 'logos/logo_rih.jpg?t=' + new Date().getTime();</script>
             </div>
         </div>
     </div>
@@ -298,7 +299,8 @@
     </div>
     <div style="margin-top: 32px; text-align: center;">
         <div style="background-color: #00384d; padding: 12px; border-radius: 8px;">
-            <img id="webFooter" src="logos/footer.jpg" alt="Footer" style="width:100%; height:auto;">
+            <img id="webFooter" alt="Footer" style="width:100%; height:auto;">
+            <script>document.getElementById('webFooter').src = 'logos/footer.jpg?t=' + new Date().getTime();</script>
         </div>
     </div>
     <script>
