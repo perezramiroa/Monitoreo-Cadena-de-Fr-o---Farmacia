@@ -665,13 +665,13 @@
         const card = document.createElement('div');
         card.className = 'device-card';
         card.id = `p-${c.id}`;
-        const typeLabel = 'Farmacia 💊 ❌';
+        const typeLabel = 'Farmacia 💊';
         const typeClass = 'farmacia';
         // Renderizar nombre y tipo
         card.innerHTML = `
 <div class="device-header">
 <span id="n-${c.id}">${c.n}</span>
-<span class="type-badge ${typeClass}" onclick="del('${c.id}')" style="cursor:pointer;" title="Eliminar">${typeLabel}</span>
+<span class="type-badge ${typeClass}">${typeLabel}</span>
 </div>
 <div class="device-body">
 <div class="sensor-grid" id="g-${c.id}">Cargando...</div>
