@@ -253,6 +253,7 @@
                                 <th>Valor</th>
                                 <th>Estado</th>
                                 <th>Duración</th>
+                                <th>Pico Registrado</th>
                                 <th>Observaciones</th>
                             </tr>
                         </thead>
@@ -594,20 +595,20 @@
                 const alertRows = [];
                 document.querySelectorAll('#alertTable tbody tr').forEach((tr, idx) => {
                     const cells = Array.from(tr.cells).map((td, cIdx) => {
-                        if (cIdx === 4) { // Columna Observaciones
+                        if (cIdx === 5) { // Columna Observaciones (ahora índice 5)
                             const input = td.querySelector('input');
                             return input ? cleanTextForPDF(input.value) : '';
                         }
                         return cleanTextForPDF(td.innerText);
                     });
-                    if (cells.length === 5 && !cells[0].toLowerCase().includes('sin eventos')) {
+                    if (cells.length === 6 && !cells[0].toLowerCase().includes('sin eventos')) {
                         alertRows.push(cells);
                     }
                 });
                 if (alertRows.length > 0) {
                     doc.autoTable({
                         startY: yPos,
-                        head: [['Fecha y Hora', 'Valor', 'Estado', 'Duración', 'Observaciones']],
+                        head: [['Fecha y Hora', 'Valor', 'Estado', 'Duración', 'Pico Registrado', 'Observaciones']],
                         body: alertRows,
                         theme: 'grid',
                         styles: { fontSize: 8, cellPadding: 2 },
@@ -835,41 +836,92 @@
             document.querySelectorAll('.btn-day').forEach(b => b.classList.remove('active'));
             run(null);
         }
+        /**
+         * Obtiene TODOS los feeds del período usando paginación hacia atrás.
+         * ThingSpeak limita a 8000 resultados por request; si el sensor envía
+         * frecuente, una sola request no alcanza para 7 días.
+         */
+        async function fetchThingSpeakCompleto(id, key, field, diasOStart, end) {
+            const ahora   = end   ? new Date(end + 'T23:59:59-03:00') : new Date();
+            const inicio  = diasOStart instanceof Date ? diasOStart
+                          : typeof diasOStart === 'number'
+                            ? new Date(ahora.getTime() - diasOStart * 24 * 60 * 60 * 1000)
+                            : new Date(diasOStart + 'T00:00:00-03:00');
+
+            let todosLosFeeds = [];
+            let fechaHasta    = new Date(ahora);
+            const MAX_PAGES   = 10;
+
+            for (let intento = 0; intento < MAX_PAGES; intento++) {
+                const startStr = inicio.toISOString().slice(0,19).replace('T','T');
+                const endStr   = fechaHasta.toISOString().slice(0,19);
+                const url = `https://api.thingspeak.com/channels/${id}/feeds.json?api_key=${key}&start=${startStr}-03:00&end=${endStr}-03:00&results=8000`;
+                const res  = await fetch(url);
+                const data = await res.json();
+
+                if (!data.feeds || data.feeds.length === 0) break;
+
+                // Agregar solo feeds más antiguos que los que ya tenemos
+                const primerTs = todosLosFeeds.length > 0
+                    ? new Date(todosLosFeeds[0].created_at).getTime()
+                    : Infinity;
+                const nuevos = data.feeds.filter(f => new Date(f.created_at).getTime() < primerTs);
+                todosLosFeeds = [...nuevos, ...todosLosFeeds];
+
+                // Si devolvió menos de 8000 ya tenemos todo el período
+                if (data.feeds.length < 8000) break;
+
+                // Retroceder: próxima request termina justo antes del primer feed recibido
+                fechaHasta = new Date(new Date(data.feeds[0].created_at).getTime() - 60000);
+                if (fechaHasta <= inicio) break;
+            }
+
+            // Filtrar al período exacto solicitado
+            const inicioMs = inicio.getTime();
+            return todosLosFeeds.filter(f => new Date(f.created_at).getTime() >= inicioMs);
+        }
+
         async function run(days) {
             try {
                 document.getElementById('loading').style.display = 'block';
                 document.getElementById('content').style.display = 'none';
-                let url;
+
+                let feeds;
                 if (CUSTOM_START && CUSTOM_END) {
-                    url = `https://api.thingspeak.com/channels/${ID}/feeds.json?api_key=${KEY}&start=${CUSTOM_START}T00:00:00-03:00&end=${CUSTOM_END}T23:59:59-03:00`;
+                    feeds = await fetchThingSpeakCompleto(ID, KEY, FIELD, new Date(CUSTOM_START + 'T00:00:00-03:00'), CUSTOM_END);
                 } else if (SELECTED_DATE) {
-                    url = `https://api.thingspeak.com/channels/${ID}/feeds.json?api_key=${KEY}&start=${SELECTED_DATE}T00:00:00-03:00&end=${SELECTED_DATE}T23:59:59-03:00`;
+                    feeds = await fetchThingSpeakCompleto(ID, KEY, FIELD, new Date(SELECTED_DATE + 'T00:00:00-03:00'), SELECTED_DATE);
                 } else {
-                    url = `https://api.thingspeak.com/channels/${ID}/feeds.json?api_key=${KEY}&minutes=${days * 1440}`;
+                    feeds = await fetchThingSpeakCompleto(ID, KEY, FIELD, days, null);
                 }
-                const res = await fetch(url);
-                const data = await res.json();
-                if (!data.feeds || data.feeds.length === 0) {
+
+                if (!feeds || feeds.length === 0) {
                     document.getElementById('status').innerText = "Sin datos en este rango.";
                     return;
                 }
-                document.getElementById('sensorName').innerText = data.channel[FIELD] || "Sensor";
+
+                // Obtener nombre del canal (una request liviana)
+                const infoRes  = await fetch(`https://api.thingspeak.com/channels/${ID}/feeds.json?api_key=${KEY}&results=1`);
+                const infoData = await infoRes.json();
+                document.getElementById('sensorName').innerText = infoData.channel[FIELD] || "Sensor";
                 const teamNameEl = document.getElementById('teamName');
-                teamNameEl.innerHTML = `Farmacia 💊: ${data.channel.name || "Sin nombre"}`;
+                teamNameEl.innerHTML = `Farmacia 💊: ${infoData.channel.name || "Sin nombre"}`;
                 teamNameEl.className = "tag farmacia-tag";
-                currentFeeds = data.feeds.filter(f => parseFloat(f[FIELD]) !== -127);
+
+                currentFeeds = feeds.filter(f => parseFloat(f[FIELD]) !== -127);
                 if (currentFeeds.length === 0) {
                     document.getElementById('status').innerText = "Sin datos validos (lecturas de error filtradas).";
                     return;
                 }
-                const labels = currentFeeds.map(f => formatDate(f.created_at));
-                const values = currentFeeds.map(f => parseFloat(f[FIELD]));
-                drawChart(labels, values, data.channel[FIELD] || "Valor");
+
+                const { labels, values } = buildChartData(feeds, FIELD);
+                drawChart(labels, values, infoData.channel[FIELD] || "Valor");
                 fillAlerts(currentFeeds, FIELD);
-                fillWifi(currentFeeds, FIELD);
+                fillWifi(feeds, FIELD); // feeds completos para detectar todos los gaps
                 document.getElementById('loading').style.display = 'none';
                 document.getElementById('content').style.display = 'block';
             } catch (e) {
+                console.error(e);
                 document.getElementById('status').innerText = "Error al cargar datos.";
             }
         }
@@ -888,7 +940,8 @@
                         borderWidth: 2,
                         pointRadius: 0,
                         tension: 0.3,
-                        fill: true
+                        fill: true,
+                        spanGaps: false
                     }]
                 },
                 options: {
@@ -898,37 +951,85 @@
                 }
             });
         }
+
+        function buildChartData(feeds, field) {
+            const labels = [];
+            const values = [];
+            const UMBRAL_GAP_MS = WIFI_CUTOFF * 60 * 1000;
+
+            for (let i = 0; i < feeds.length; i++) {
+                const f = feeds[i];
+                const val = parseFloat(f[field]);
+                const d = new Date(f.created_at);
+                const labelStr = `${d.getDate()}/${d.getMonth()+1} ${d.getHours()}:${String(d.getMinutes()).padStart(2,'0')}`;
+
+                // Detectar gap temporal respecto al punto anterior
+                if (i > 0) {
+                    const prevD = new Date(feeds[i-1].created_at);
+                    const diffMs = d - prevD;
+                    if (diffMs > UMBRAL_GAP_MS) {
+                        labels.push('--- CORTE ---');
+                        values.push(null);
+                    }
+                }
+
+                // -127 o NaN: espacio vacío
+                if (isNaN(val) || val === -127) {
+                    labels.push(labelStr);
+                    values.push(null);
+                } else {
+                    labels.push(labelStr);
+                    values.push(val);
+                }
+            }
+            return { labels, values };
+        }
         function fillAlerts(feeds, field) {
             const tbody = document.querySelector('#alertTable tbody');
             let lastState = 'normal';
             let startTime = null;
             let rows = '';
             let alertData = [];
+            let picoValor = null;
+            let picoHora  = null;
 
             feeds.forEach(f => {
                 const val = parseFloat(f[field]);
-                if (isNaN(val)) return;
+                if (isNaN(val) || val === -127) return;
                 const state = (val > MAX) ? 'high' : (val < MIN) ? 'low' : 'normal';
+
+                if (state !== 'normal') {
+                    if (picoValor === null) {
+                        picoValor = val; picoHora = f.created_at;
+                    } else {
+                        if (state === 'high' && val > picoValor) { picoValor = val; picoHora = f.created_at; }
+                        if (state === 'low'  && val < picoValor) { picoValor = val; picoHora = f.created_at; }
+                    }
+                }
+
                 if (state !== lastState) {
                     if (state !== 'normal') {
                         startTime = f.created_at;
+                        picoValor = val; picoHora = f.created_at;
                         const label = state === 'high' ? '🔥 Alta (riesgo de pérdida)' : '❄️ Baja (riesgo de congelación)';
                         const obsId = `alerta_${f.created_at}`;
                         const valorGuardado = observacionesAlmacenadas[obsId] || '';
                         const inputHtml = `<td><input type="text" style="width:100%; border:1px solid #ddd; border-radius:4px; padding:2px 4px;" value="${valorGuardado.replace(/"/g, '&quot;')}" placeholder="Nota..." onchange="guardarObservacion(this, '${obsId}')"></td>`;
-                        rows += `<tr class="row-alert"><td>${formatDateTime(f.created_at)}</td><td>${val.toFixed(1)}</td><td>${label}</td><td>--</td>${inputHtml}</tr>`;
+                        rows += `<tr class="row-alert"><td>${formatDateTime(f.created_at)}</td><td>${val.toFixed(1)}°C</td><td>${label}</td><td>--</td><td>--</td>${inputHtml}</tr>`;
                     } else if (startTime) {
                         const dur = (new Date(f.created_at) - new Date(startTime)) / 60000;
+                        const picoStr = picoValor !== null ? `${picoValor.toFixed(1)}°C (${formatDateTime(picoHora)})` : '--';
                         const obsId = `recuperacion_${f.created_at}`;
                         const valorGuardado = observacionesAlmacenadas[obsId] || '';
                         const inputHtml = `<td><input type="text" style="width:100%; border:1px solid #ddd; border-radius:4px; padding:2px 4px;" value="${valorGuardado.replace(/"/g, '&quot;')}" placeholder="Nota..." onchange="guardarObservacion(this, '${obsId}')"></td>`;
-                        rows += `<tr><td>${formatDateTime(f.created_at)}</td><td>${val.toFixed(1)}</td><td>✅ Recuperación</td><td>${formatDurationFull(dur)}</td>${inputHtml}</tr>`;
+                        rows += `<tr><td>${formatDateTime(f.created_at)}</td><td>${val.toFixed(1)}°C</td><td>✅ Recuperación</td><td>${formatDurationFull(dur)}</td><td>${picoStr}</td>${inputHtml}</tr>`;
                         alertData.push({ estado: lastState, duracion: dur });
+                        picoValor = null; picoHora = null;
                     }
                     lastState = state;
                 }
             });
-            tbody.innerHTML = rows || '<tr><td colspan="5" class="empty">✅ Sin eventos fuera de rango.</td></tr>';
+            tbody.innerHTML = rows || '<tr><td colspan="6" class="empty">✅ Sin eventos fuera de rango.</td></tr>';
 
             // Llenar boxes de análisis
             const analisisCont = document.getElementById('analisisAlertasContenido');
@@ -955,11 +1056,15 @@
             for (let i = 1; i < feeds.length; i++) {
                 const diff = (new Date(feeds[i].created_at) - new Date(feeds[i - 1].created_at)) / 60000;
                 if (diff > WIFI_CUTOFF) {
-                    const type = parseFloat(feeds[i][field]) > MAX || parseFloat(feeds[i][field]) < MIN ? '⚡ Corte de Energía' : '📶 Corte de WiFi';
-                    const obsId = `wifi_${feeds[i].created_at}`;
+                    const vAntes = parseFloat(feeds[i-1][field]);
+                    const vDesp  = parseFloat(feeds[i][field]);
+                    const tAStr  = (isNaN(vAntes) || vAntes === -127) ? '--' : vAntes.toFixed(1) + '°C';
+                    const tDStr  = (isNaN(vDesp)  || vDesp  === -127) ? '--' : vDesp.toFixed(1)  + '°C';
+                    const type   = (!isNaN(vDesp) && vDesp !== -127 && (vDesp > MAX || vDesp < MIN)) ? '⚡ Corte de Energía' : '📶 Corte de WiFi';
+                    const obsId  = `wifi_${feeds[i].created_at}`;
                     const valorGuardado = observacionesAlmacenadas[obsId] || '';
                     const inputHtml = `<td><input type="text" style="width:100%; border:1px solid #ddd; border-radius:4px; padding:2px 4px;" value="${valorGuardado.replace(/"/g, '&quot;')}" placeholder="Nota..." onchange="guardarObservacion(this, '${obsId}')"></td>`;
-                    rows += `<tr><td>${formatDateTime(feeds[i - 1].created_at)}</td><td>${formatDateTime(feeds[i].created_at)}</td><td>${type}</td><td>${feeds[i - 1][field]}°C</td><td>${feeds[i][field]}°C</td><td>${formatDurationFull(diff)}</td>${inputHtml}</tr>`;
+                    rows += `<tr><td>${formatDateTime(feeds[i-1].created_at)}</td><td>${formatDateTime(feeds[i].created_at)}</td><td>${type}</td><td>${tAStr}</td><td>${tDStr}</td><td>${formatDurationFull(diff)}</td>${inputHtml}</tr>`;
                     wifiData.push({ tipo: type, duracion: diff });
                 }
             }
@@ -1003,21 +1108,27 @@
             let alertasAltas = 0;
             let alertasBajas = 0;
             eventos.forEach(evento => {
-                const duracion = parseFloat(evento.duracion) || 0;
-                totalDuracion += duracion;
-                if (evento.estado.toLowerCase().includes('alta')) alertasAltas++;
-                else if (evento.estado.toLowerCase().includes('baja')) alertasBajas++;
+                const dur = parseFloat(evento.duracion) || 0;
+                totalDuracion += dur;
+                const st = (evento.estado || '').toLowerCase();
+                if (st.includes('alta') || st.includes('high')) alertasAltas++;
+                else if (st.includes('baja') || st.includes('low')) alertasBajas++;
             });
-            let analisis = `Se detectaron ${eventos.length} evento(s) de temperatura fuera de rango.\n`;
-            analisis += `• Alertas por temperatura alta: ${alertasAltas}\n`;
-            analisis += `• Alertas por temperatura baja: ${alertasBajas}\n`;
-            analisis += `• Tiempo total acumulado fuera de rango: ${formatDurationFull(totalDuracion)}\n\n`;
+
+            let analisis = `Se registraron desvíos térmicos acumulados por un total de ${formatDurationFull(totalDuracion)}.\n`;
+            analisis += `• Incidentes de calor (>8°C): ${alertasAltas}\n`;
+            analisis += `• Incidentes de frío (<2°C): ${alertasBajas}\n`;
+
+            if (alertasBajas > 0) {
+                analisis += "\n⚠ ADVERTENCIA CRÍTICA: Se detectó riesgo de CONGELACIÓN. La exposición a temperaturas inferiores a 2°C puede inactivar de forma irreversible medicamentos termolábiles (insulinas, vacunas, biotecnológicos). Requiere evaluación urgente.\n";
+            }
+
             if (totalDuracion < 30) {
-                analisis += "Los desvíos fueron breves y no representan un riesgo crítico para la cadena de frío. Se recomienda monitorear de cerca las próximas horas.";
+                analisis += "\nLos desvíos fueron breves. Se asume que no hay degradación significativa, pero se sugiere supervisar hermeticidad y termostatos.";
             } else if (totalDuracion < 120) {
-                analisis += "Se registraron desvíos de moderada duración. Es posible que algunos medicamentos hayan sido afectados. Se requiere revisión de protocolos.";
+                analisis += "\nDesvío térmico moderado. Se recomienda formalizar la novedad en el registro de incidencias y consultar con el responsable de Farmacia.";
             } else {
-                analisis += "Los desvíos fueron prolongados y representan un riesgo significativo. Se requiere evaluación técnica inmediata y posible descarte de medicamentos afectados.";
+                analisis += "\nDESVÍO CRÍTICO Y PROLONGADO: Apartar de forma preventiva los medicamentos afectados con rótulo 'NO DISPENSAR - EN EVALUACIÓN' y notificar de inmediato a la Jefatura de Farmacia. Evaluar según Disposición ANMAT 10.872/2020.";
             }
             return analisis;
         }
@@ -1026,40 +1137,38 @@
             if (!eventos || eventos.length === 0) {
                 return "• Continuar con el monitoreo habitual.\n• Mantener registro actualizado de temperaturas.\n• Realizar mantenimiento preventivo según calendario.";
             }
-            const tieneAltas = eventos.some(e => e.estado.toLowerCase().includes('alta'));
-            const tieneBajas = eventos.some(e => e.estado.toLowerCase().includes('baja'));
-            let recomendaciones = [];
+            const tieneAltas = eventos.some(e => { const st = (e.estado||'').toLowerCase(); return st.includes('alta') || st.includes('high'); });
+            const tieneBajas = eventos.some(e => { const st = (e.estado||'').toLowerCase(); return st.includes('baja') || st.includes('low'); });
+            let recom = [];
 
             if (tieneAltas) {
-                recomendaciones.push("• Temperatura ALTA (>8°C): verificar el sistema de refrigeración y estado del compresor.");
-                recomendaciones.push("• Controlar el sellado hermético de puertas y burletes del equipo.");
-                recomendaciones.push("• Evaluar la aptitud de los medicamentos afectados según protocolo vigente (Disposición ANMAT 10.872/2020).");
+                recom.push("• Calor excesivo: Comprobar el cierre magnético de las puertas y la limpieza del radiador externo del motor.");
+                recom.push("• Controlar el termostato y el estado del compresor (causas más frecuentes de temperatura alta).");
+                recom.push("• Evaluar la aptitud de los medicamentos afectados según Disposición ANMAT 10.872/2020.");
             }
             if (tieneBajas) {
-                recomendaciones.push("• Temperatura BAJA (<2°C): revisar la configuración del termostato del equipo.");
-                recomendaciones.push("• Verificar que los medicamentos no estén en contacto directo con el evaporador.");
-                recomendaciones.push("• Controlar que la puerta no haya quedado abierta en ambiente frío.");
+                recom.push("• Frío extremo: Revisar la configuración del termostato del equipo.");
+                recom.push("• Verificar que los medicamentos no estén en contacto directo con el evaporador.");
+                recom.push("• Controlar que la puerta no haya quedado abierta en ambiente frío.");
             }
-            recomendaciones.push("• Controlar la calibración del sensor contra un termómetro patrón certificado.");
-            recomendaciones.push("• Documentar el evento en el registro de incidencias de cadena de frío.");
-            recomendaciones.push("• Evaluar la necesidad de respaldo eléctrico (UPS) para el equipo de refrigeración.");
-            return recomendaciones.join('\n');
+            recom.push("• Registrar el incidente en el libro de control de temperatura firmado por el responsable.");
+            recom.push("• Calibrar la lectura del datalogger con un termómetro patrón certificado.");
+            recom.push("• Evaluar instalación de UPS en el equipo de refrigeración para evitar cortes por falta de energía.");
+            return recom.join('\n');
         }
 
         function generarAnalisisEventos(eventos) {
-            if (!eventos || eventos.length === 0) return "No se detectaron interrupciones de conectividad significativas. Monitoreo continuo confirmado.";
+            if (!eventos || eventos.length === 0) return "Transmisión continua de datos WiFi confirmada. No se registraron brechas de trazabilidad digital en el período.";
             let totalDuracion = 0;
             eventos.forEach(e => { totalDuracion += parseFloat(e.duracion) || 0; });
             const n = eventos.length;
-            let analisis = `Se ${n === 1 ? 'detectó' : 'detectaron'} ${n} ${n === 1 ? 'interrupción' : 'interrupciones'} de datos.\n`;
-            analisis += `• Tiempo total sin datos: ${formatDurationFull(totalDuracion)}\n`;
-            analisis += `• Durante los períodos sin datos no se puede garantizar el control de la cadena de frío.\n\n`;
+            let analisis = `Interrupciones de transmisión de datos detectadas: ${n}.\n`;
+            analisis += `• Duración acumulada sin datos: ${formatDurationFull(totalDuracion)}\n`;
+            analisis += `• Durante los períodos sin datos no se puede garantizar el control de la cadena de frío.\n`;
             if (totalDuracion < 60) {
-                analisis += "Los cortes fueron breves y no afectaron significativamente el registro continuo.";
-            } else if (totalDuracion < 240) {
-                analisis += "Los cortes fueron de duración moderada. Se recomienda verificar las temperaturas registradas antes y después del corte.";
+                analisis += "\nLos cortes de señal WiFi fueron breves y no comprometen la trazabilidad global. Se asume estabilidad del equipo.";
             } else {
-                analisis += "Los cortes fueron prolongados. No se puede garantizar la integridad de la cadena de frío durante estos períodos. Requiere evaluación según Disposición ANMAT 10.872/2020.";
+                analisis += "\nLas interrupciones prolongadas representan una brecha de trazabilidad. Es mandatorio constatar los registros de control manual para el período afectado, conforme a la Disposición ANMAT 10.872/2020.";
             }
             return analisis;
         }
@@ -1070,12 +1179,11 @@
             }
             let totalDuracion = 0;
             eventos.forEach(e => { totalDuracion += parseFloat(e.duracion) || 0; });
-            let recom = "• Verificar el estado del router y la conexión a internet.\n";
-            recom += "• Revisar la distancia entre el sensor y el punto de acceso WiFi.\n";
-            recom += "• Mantener actualizado el firmware del sensor.\n";
+            let recom = "• Verificar el suministro de alimentación eléctrica del router local (se aconseja usar UPS).\n";
+            recom += "• Asegurar la correcta orientación de la antena del datalogger y evitar barreras metálicas.\n";
+            recom += "• Ante cortes de señal recurrentes, asentar lecturas de temperatura de forma manual en planillas oficiales cada 4 horas.";
             if (totalDuracion >= 60) {
-                recom += "• Implementar registro manual de temperatura durante períodos sin conectividad (exigido por normativa).\n";
-                recom += "• Evaluar instalación de UPS en el equipo de red para evitar cortes por falta de energía.";
+                recom += "\n• Implementar registro manual de temperatura durante períodos sin conectividad (exigido por Disposición ANMAT 10.872/2020).";
             }
             return recom;
         }
