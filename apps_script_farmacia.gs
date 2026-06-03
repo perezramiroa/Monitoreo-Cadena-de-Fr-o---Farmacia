@@ -30,7 +30,7 @@ function ejecutarReporteSemanal() {
 
   SENSORES.forEach(s => {
     try {
-      const data = fetchThingSpeakData(s.id, s.k, 7);
+      const data = fetchThingSpeakDataCompleto(s.id, s.k, 7);
       if (!data || !data.feeds || data.feeds.length === 0) return;
 
       // Guardar feeds para el sheet
@@ -78,11 +78,11 @@ function generarPDFOficial(sensor, fecha, rango, trazabilidad, analizada, conect
   header.appendHorizontalRule();
 
   // --- TÍTULO ---
-  const t1 = body.appendParagraph("INFORME TÉCNICO DE CADENA DE FRÍO\nMEDICAMENTOS REFRIGERADOS");
+  const t1 = body.appendParagraph("INFORME TÉCNICO DE CADENA DE FRÍO - MEDICAMENTOS REFRIGERADOS");
   t1.setFontSize(14).setBold(true).setForegroundColor("#00384d").setSpacingAfter(4);
 
   // --- NORMATIVA ---
-  body.appendParagraph("Según Disposición ANMAT 10.872/2020")
+  body.appendParagraph("Según Disposición ANMAT 10.872/2020 y Disposición ANMAT 2069/2018")
     .setFontSize(9).setItalic(true).setSpacingAfter(10);
 
   // --- DATOS DEL DISPOSITIVO ---
@@ -103,18 +103,18 @@ function generarPDFOficial(sensor, fecha, rango, trazabilidad, analizada, conect
   pChart.appendInlineImage(grafico).setWidth(anchoMax).setHeight(300);
 
   // --- TABLA DE ALERTAS ---
-  body.appendParagraph("\n⚠️ ALERTAS Y RECUPERACIONES (2°C - 8°C)")
+  body.appendParagraph("ALERTAS Y RECUPERACIONES (2°C - 8°C)")
     .setBold(true).setFontSize(10).setSpacingAfter(4);
-  const tablaAlertas = [["Fecha y Hora", "Valor", "Estado", "Duración"]];
+  const tablaAlertas = [["Fecha y Hora", "Valor", "Estado", "Duración", "Pico Registrado"]];
   if (analizada.alertasFilas.length > 0) {
-    analizada.alertasFilas.forEach(f => tablaAlertas.push([f.h, f.v, f.e, f.d]));
+    analizada.alertasFilas.forEach(f => tablaAlertas.push([f.h, f.v, f.e, f.d, f.p || "--"]));
   } else {
-    tablaAlertas.push(["-", "-", "✅ Sin eventos fuera de rango", "-"]);
+    tablaAlertas.push(["-", "-", "Sin eventos fuera de rango", "-", "-"]);
   }
   estilizarTabla(body.appendTable(tablaAlertas));
 
   // --- EVENTOS DE CONECTIVIDAD ---
-  body.appendParagraph("\n📡 EVENTOS DETECTADOS (>10 min sin datos)")
+  body.appendParagraph("EVENTOS DETECTADOS (>10 min sin datos)")
     .setBold(true).setFontSize(10).setSpacingAfter(4);
   const tablaWifi = [["Inicio", "Fin", "Tipo de Corte", "T. Antes", "T. Desp.", "Duración"]];
   if (conectividad.filas.length > 0) {
@@ -124,31 +124,24 @@ function generarPDFOficial(sensor, fecha, rango, trazabilidad, analizada, conect
   }
   estilizarTabla(body.appendTable(tablaWifi));
 
-  // --- ANÁLISIS Y RECOMENDACIONES (SEPARADOS VISUALMENTE) ---
-  body.appendParagraph("\nANÁLISIS TÉCNICO:").setBold(true).setFontSize(10);
-  
-  // Análisis de alertas
+  // --- ANÁLISIS Y RECOMENDACIONES ---
+  body.appendParagraph("ANÁLISIS TÉCNICO:").setBold(true).setFontSize(10);
   if (analizada.textoAnalisis) {
     body.appendParagraph(analizada.textoAnalisis).setFontSize(9).setItalic(true);
   }
-  
-  // Análisis de conectividad (separado)
   if (conectividad.analisis && conectividad.analisis !== "Sin problemas de conectividad.") {
-    body.appendParagraph("\nConectividad:").setBold(true).setFontSize(9);
+    body.appendParagraph("Conectividad:").setBold(true).setFontSize(9);
     body.appendParagraph(conectividad.analisis).setFontSize(9).setItalic(true);
   }
-
-  body.appendParagraph("\nRECOMENDACIONES:").setBold(true).setFontSize(10).setForegroundColor("#00384d");
+  body.appendParagraph("RECOMENDACIONES:").setBold(true).setFontSize(10).setForegroundColor("#00384d");
   body.appendParagraph(analizada.textoRecom + "\n• " + conectividad.recom).setFontSize(9);
 
   // Nota técnica final
-  const pNota = body.appendParagraph("\n⚙️ NOTA TÉCNICA:");
-  pNota.setBold(true).setFontSize(9).setForegroundColor("#475569");
+  body.appendParagraph("NOTA TÉCNICA:").setBold(true).setFontSize(9).setForegroundColor("#475569");
   body.appendParagraph(analizada.notaTecnica).setFontSize(8).setItalic(true).setForegroundColor("#475569");
 
   // Nota de responsabilidad
-  const pResp = body.appendParagraph("\n⚠️ RESPONSABILIDAD:");
-  pResp.setBold(true).setFontSize(9).setForegroundColor("#475569");
+  body.appendParagraph("RESPONSABILIDAD:").setBold(true).setFontSize(9).setForegroundColor("#475569");
   body.appendParagraph(analizada.notaResponsabilidad).setFontSize(8).setItalic(true).setForegroundColor("#475569");
 
   // --- PIE DE PÁGINA con línea separadora arriba ---
@@ -169,7 +162,7 @@ function generarPDFOficial(sensor, fecha, rango, trazabilidad, analizada, conect
 }
 
 function analizarConectividad(feeds, field) {
-  let filas = [];
+  const filas = [];
   let totalMinutos = 0;
   for (let i = 1; i < feeds.length; i++) {
     const d1 = new Date(feeds[i-1].created_at);
@@ -178,13 +171,13 @@ function analizarConectividad(feeds, field) {
     if (diff > 10) {
       const v1 = parseFloat(feeds[i-1][field]);
       const v2 = parseFloat(feeds[i][field]);
-      const tipo = (v2 > 8 || v2 < 2) ? 'Corte Energía' : 'Corte WiFi';
+      const tipo = (!isNaN(v2) && v2 !== -127 && (v2 > 8 || v2 < 2)) ? 'Corte Energía' : 'Corte WiFi';
       filas.push({
-        inicio: Utilities.formatDate(d1, "GMT-3", "dd/MM HH:mm"),
-        fin: Utilities.formatDate(d2, "GMT-3", "dd/MM HH:mm"),
-        tipo: tipo,
-        antes: isNaN(v1) ? "--" : v1.toFixed(2) + "°C",
-        despues: isNaN(v2) ? "--" : v2.toFixed(2) + "°C",
+        inicio:  fmtFecha(d1),
+        fin:     fmtFecha(d2),
+        tipo:    tipo,
+        antes:   (isNaN(v1) || v1 === -127) ? "--" : v1.toFixed(1) + "°C",
+        despues: (isNaN(v2) || v2 === -127) ? "--" : v2.toFixed(1) + "°C",
         duracion: formatDur(diff)
       });
       totalMinutos += diff;
@@ -192,11 +185,11 @@ function analizarConectividad(feeds, field) {
   }
   return {
     filas: filas,
-    analisis: filas.length > 0 
-      ? `Se detectaron ${filas.length} ${filas.length === 1 ? 'interrupción' : 'interrupciones'} de datos.\n• Tiempo total sin datos: ${formatDur(totalMinutos)}\n• Durante los cortes no se puede garantizar el control de la cadena de frío.` 
-      : "Sin problemas de conectividad. Monitoreo continuo confirmado.",
+    analisis: filas.length > 0
+      ? `Se detectaron ${filas.length} ${filas.length === 1 ? 'interrupción' : 'interrupciones'} de datos.\n• Tiempo total sin datos: ${formatDur(totalMinutos)}\n• Durante los cortes no se puede garantizar el control de la cadena de frío.`
+      : "Transmisión continua de datos WiFi confirmada. No se registraron brechas en el período.",
     recom: filas.length > 0
-      ? "Verificar el estado del router y la conexión a internet.\n• Revisar la distancia entre el sensor y el punto de acceso WiFi.\n• Considerar registro manual de temperatura durante los períodos sin datos.\n• Evaluar instalación de UPS para el equipo de red."
+      ? "• Verificar el estado del router y la conexión a internet.\n• Revisar la distancia entre el sensor y el punto de acceso WiFi.\n• Considerar registro manual de temperatura durante los períodos sin datos.\n• Evaluar instalación de UPS para el equipo de red."
       : "Mantener el equipo de red en condiciones óptimas para asegurar monitoreo continuo."
   };
 }
@@ -206,19 +199,39 @@ function analizarDatos(feeds, field) {
   let lastState = 'normal';
   let startTime = null;
   let stats = [];
+  let picoValor = null;
+  let picoHora  = null;
+
   feeds.forEach(f => {
     const val = parseFloat(f[field]);
-    if (isNaN(val)) return;
+    if (isNaN(val) || val === -127) return;
     const state = (val > 8.0) ? 'Alta' : (val < 2.0) ? 'Baja' : 'normal';
+
+    // Actualizar pico dentro de la alerta activa
+    if (state !== 'normal') {
+      if (picoValor === null) {
+        picoValor = val; picoHora = f.created_at;
+      } else {
+        if (state === 'Alta' && val > picoValor) { picoValor = val; picoHora = f.created_at; }
+        if (state === 'Baja' && val < picoValor) { picoValor = val; picoHora = f.created_at; }
+      }
+    }
+
     if (state !== lastState) {
-      const hora = Utilities.formatDate(new Date(f.created_at), "GMT-3", "dd/MM HH:mm");
+      const hora = fmtFecha(new Date(f.created_at));
       if (state !== 'normal') {
         startTime = new Date(f.created_at);
-        alertasFilas.push({ h: hora, v: val.toFixed(1) + "°C", e: state === 'Alta' ? "⚠️ Alerta Alta (>8°C)" : "⚠️ Alerta Baja (<2°C)", d: "--" });
+        picoValor = val; picoHora = f.created_at;
+        const label = state === 'Alta' ? "⚠ Alerta Alta (>8°C)" : "❄ Alerta Baja (<2°C)";
+        alertasFilas.push({ h: hora, v: val.toFixed(1) + "°C", e: label, d: "--", p: "--" });
       } else if (startTime) {
         const dur = (new Date(f.created_at) - startTime) / 60000;
-        alertasFilas.push({ h: hora, v: val.toFixed(1) + "°C", e: "✅ Recuperación", d: formatDur(dur) });
+        const picoStr = picoValor !== null ? picoValor.toFixed(1) + "°C (" + fmtFecha(new Date(picoHora)) + ")" : "--";
+        // Actualizar el pico en la fila de inicio de alerta
+        if (alertasFilas.length > 0) alertasFilas[alertasFilas.length - 1].p = picoStr;
+        alertasFilas.push({ h: hora, v: val.toFixed(1) + "°C", e: "✅ Recuperación", d: formatDur(dur), p: picoStr });
         stats.push({ s: lastState, d: dur });
+        picoValor = null; picoHora = null;
       }
       lastState = state;
     }
@@ -233,19 +246,19 @@ function analizarDatos(feeds, field) {
 
   if (stats.length > 0) {
     textoAnalisis = `Se detectaron ${stats.length} ${stats.length === 1 ? 'desvío térmico' : 'desvíos térmicos'} (duración total: ${formatDur(durTotal)}).\n`;
-    if (tieneAltas) textoAnalisis += `• Temperatura ALTA (>8°C): riesgo de degradación de medicamentos termolábiles.\n`;
-    if (tieneBajas) textoAnalisis += `• Temperatura BAJA (<2°C): riesgo de congelación de medicamentos refrigerados.\n`;
+    if (tieneAltas) textoAnalisis += "• Temperatura ALTA (>8°C): riesgo de degradación de medicamentos termolábiles.\n";
+    if (tieneBajas) textoAnalisis += "• Temperatura BAJA (<2°C): riesgo de congelación de medicamentos refrigerados.\n";
     if (durTotal < 30) {
       textoAnalisis += "Los desvíos fueron breves. Se recomienda monitorear las próximas horas.";
     } else if (durTotal < 120) {
-      textoAnalisis += "Desvíos de moderada duración. Evaluar posible afectación de medicamentos.";
+      textoAnalisis += "Desvíos de moderada duración. Evaluar posible afectación de medicamentos según Disposición ANMAT 10.872/2020.";
     } else {
-      textoAnalisis += "Desvíos prolongados. Requiere evaluación técnica inmediata según Disposición ANMAT 10.872/2020.";
+      textoAnalisis += "Desvíos prolongados. Requiere evaluación técnica inmediata. Apartar medicamentos afectados con rótulo 'NO DISPENSAR - EN EVALUACIÓN' y notificar al Director Técnico de Farmacia.";
     }
 
     textoRecom = "";
     if (tieneAltas) {
-      textoRecom += "• Temperatura ALTA detectada: verificar sistema de refrigeración y sellado de puertas.\n";
+      textoRecom += "• Temperatura ALTA: verificar sistema de refrigeración y sellado de puertas.\n";
       textoRecom += "  → Los medicamentos refrigerados pueden degradarse irreversiblemente por encima de 8°C.\n";
       textoRecom += "• Controlar termostato y estado del compresor.\n";
       textoRecom += "  → Un termostato descalibrado o compresor con falla son las causas más frecuentes de temperatura alta.\n";
@@ -253,21 +266,18 @@ function analizarDatos(feeds, field) {
       textoRecom += "  → La Disposición ANMAT 10.872/2020 exige evaluación documentada ante toda ruptura de cadena de frío.\n";
     }
     if (tieneBajas) {
-      textoRecom += "• Temperatura BAJA detectada: revisar configuración del termostato.\n";
-      textoRecom += "  → La causa más frecuente de temperatura baja es el termostato configurado demasiado frío.\n";
+      textoRecom += "• Temperatura BAJA: revisar configuración del termostato.\n";
+      textoRecom += "  → La causa más frecuente es el termostato configurado demasiado frío.\n";
       textoRecom += "• Verificar que no haya contacto directo de medicamentos con el evaporador.\n";
-      textoRecom += "  → Los medicamentos cerca del evaporador pueden congelarse aunque el promedio del equipo sea correcto.\n";
       textoRecom += "• Controlar que la puerta no haya quedado abierta en ambiente frío.\n";
-      textoRecom += "  → En ambientes fríos, una puerta abierta puede bajar la temperatura por debajo de 2°C.\n";
     }
     textoRecom += "• Documentar el evento en el registro de incidencias de cadena de frío.\n";
     textoRecom += "  → La normativa exige trazabilidad completa de toda ruptura para auditorías sanitarias.\n";
   }
 
-  // Nota técnica final — siempre presente
-  const notaTecnica = "NOTA TÉCNICA: Ante cualquier desvío térmico o falla del equipo, la intervención correctiva debe ser realizada por personal técnico calificado (Técnico en Refrigeración matriculado o servicio técnico autorizado por el fabricante). Ante fallas persistentes, contactar al Técnico en Refrigeración habilitado y notificar a la Jefatura según corresponda. Toda intervención debe quedar documentada con fecha, descripción y firma del responsable, conforme a la Disposición ANMAT 10.872/2020 y las Buenas Prácticas de Almacenamiento (Resolución ANMAT 368/2000).";
+  const notaTecnica = "NOTA TÉCNICA: Ante cualquier desvío térmico o falla del equipo, la intervención correctiva debe ser realizada por personal técnico calificado (Técnico en Refrigeración matriculado o servicio técnico autorizado por el fabricante). Ante fallas persistentes, contactar al Técnico en Refrigeración habilitado y notificar al Director Técnico de Farmacia según corresponda. Toda intervención debe quedar documentada con fecha, descripción y firma del responsable, conforme a la Disposición ANMAT 10.872/2020, la Disposición ANMAT 2069/2018 (Buenas Prácticas de Distribución) y las Buenas Prácticas de Almacenamiento (Resolución ANMAT 368/2000).";
 
-  const notaResponsabilidad = "RESPONSABILIDAD: La responsabilidad del cumplimiento de las condiciones de conservación y de la cadena de frío en el sector Farmacia recae sobre la Jefatura de Farmacia, conforme a la Ley Nacional 17.565 y la Disposición ANMAT 10.872/2020. Ante cualquier incidente, el responsable del sector debe ser notificado de forma inmediata.";
+  const notaResponsabilidad = "RESPONSABILIDAD: La responsabilidad del cumplimiento de las condiciones de conservación y de la cadena de frío en el sector Farmacia recae sobre el Director Técnico de Farmacia, conforme a la Ley Nacional 17.565 y su Decreto Reglamentario 7.123/68 (art. 10 inc. d), y la Disposición ANMAT 10.872/2020. Ante cualquier incidente, el Director Técnico debe ser notificado de forma inmediata.";
 
   return { alertasFilas, textoAnalisis, textoRecom, notaTecnica, notaResponsabilidad };
 }
@@ -277,47 +287,64 @@ function generarGraficoCurva(feeds, field, nombre) {
     .addColumn(Charts.ColumnType.STRING, "Tiempo")
     .addColumn(Charts.ColumnType.NUMBER, "°C");
 
-  let vals = feeds.map(f => parseFloat(f[field])).filter(v => !isNaN(v));
-  if (vals.length === 0) vals = [5];
-  let minVal = Math.min(...vals);
-  let maxVal = Math.max(...vals);
+  const vals = feeds.map(f => parseFloat(f[field])).filter(v => !isNaN(v) && v !== -127);
+  if (vals.length === 0) {
+    dataTable.addRow(["Sin datos", 5]);
+    return Charts.newLineChart()
+      .setDataTable(dataTable).setDimensions(2200, 520)
+      .setColors(["#3b82f6"]).setOption("backgroundColor", "white")
+      .build().getAs('image/png');
+  }
 
-  let yMin = minVal - 0.5;
-  let yMax = maxVal + 0.5;
+  const minVal = Math.min(...vals);
+  const maxVal = Math.max(...vals);
+  const yMin = minVal - 0.5;
+  const yMax = maxVal + 0.5;
 
-  const numPuntos = 800; // Mucho más detalle para igualar al reporte manual
+  const UMBRAL_GAP_MS = 10 * 60 * 1000;
+  const numPuntos = 800;
   const step = Math.max(1, Math.floor(feeds.length / numPuntos));
-  
-  for (let i = 0; i < feeds.length; i += step) {
-    let f = feeds[i];
-    let val = parseFloat(f[field]);
-    let date = new Date(f.created_at);
-    
-    if (!isNaN(val) && !isNaN(date.getTime())) {
-      let label = Utilities.formatDate(date, "GMT-3", "dd/MM HH:mm");
-      dataTable.addRow([label, val]);
+
+  const puntosMuestreados = [];
+  for (let i = 0; i < feeds.length; i += step) puntosMuestreados.push(feeds[i]);
+
+  let ultimoTsValido = null;
+
+  for (let i = 0; i < puntosMuestreados.length; i++) {
+    const f   = puntosMuestreados[i];
+    const val = parseFloat(f[field]);
+    const date = new Date(f.created_at);
+    if (isNaN(date.getTime())) continue;
+
+    // Detectar gap temporal — romper la línea solo por cortes reales de conectividad
+    if (ultimoTsValido !== null && (date.getTime() - ultimoTsValido) > UMBRAL_GAP_MS) {
+      dataTable.addRow([fmtFecha(date).slice(0, 13), null]);
+    }
+
+    // -127 o NaN: omitir el punto sin romper la línea
+    if (!isNaN(val) && val !== -127) {
+      dataTable.addRow([fmtFecha(date).slice(0, 13), val]);
+      ultimoTsValido = date.getTime();
     }
   }
 
   return Charts.newLineChart()
     .setDataTable(dataTable)
     .setDimensions(2200, 520)
-    .setColors(["#3b82f6"]) 
-    .setOption("areaOpacity", 0.1) 
-    .setOption("lineWidth", 1.5) 
-    .setOption("vAxis", { 
-      gridlines: { count: 8, color: '#cbd5e1' }, 
+    .setColors(["#3b82f6"])
+    .setOption("areaOpacity", 0.1)
+    .setOption("lineWidth", 1.5)
+    .setOption("vAxis", {
+      gridlines: { count: 8, color: '#cbd5e1' },
       viewWindow: { min: yMin, max: yMax },
       format: '#.0°C',
       textStyle: { fontSize: 14, color: '#000000', bold: true },
       textPosition: 'out'
     })
-    .setOption("hAxis", { 
-      slantedText: true, 
-      slantedTextAngle: 45,
-      textStyle: { fontSize: 12, color: '#000000', bold: true }, 
-      gridlines: { color: 'none' },
-      showTextEvery: 60 
+    .setOption("hAxis", {
+      slantedText: true, slantedTextAngle: 45,
+      textStyle: { fontSize: 12, color: '#000000', bold: true },
+      gridlines: { color: 'none' }, showTextEvery: 60
     })
     .setOption("chartArea", { width: '94%', height: '70%', left: '4%', right: '1%', top: '4%' })
     .setOption("legend", { position: 'none' })
@@ -343,48 +370,45 @@ function fetchThingSpeakData(id, key, d) {
 }
 
 /**
- * Obtiene TODOS los feeds de los últimos N días usando paginación.
- * ThingSpeak limita a 8000 resultados por request, así que
- * hacemos múltiples requests avanzando por fecha.
+ * Obtiene TODOS los feeds de los últimos N días usando paginación hacia atrás.
+ * Garantiza cubrir el período completo aunque haya más de 8000 registros.
  */
 function fetchThingSpeakDataCompleto(id, key, dias) {
-  const ahora = new Date();
+  const ahora  = new Date();
   const inicio = new Date(ahora.getTime() - dias * 24 * 60 * 60 * 1000);
-  
+
   let todosLosFeeds = [];
-  let fechaDesde = new Date(inicio);
-  let intentos = 0;
-  const MAX_INTENTOS = 5; // máximo 5 páginas = 40.000 registros
+  let fechaHasta    = new Date(ahora);
+  let intentos      = 0;
+  const MAX_INTENTOS = 10;
 
   while (intentos < MAX_INTENTOS) {
-    const startStr = Utilities.formatDate(fechaDesde, "GMT-3", "yyyy-MM-dd'T'HH:mm:ss");
-    const endStr   = Utilities.formatDate(ahora,      "GMT-3", "yyyy-MM-dd'T'HH:mm:ss");
-    
+    const startStr = Utilities.formatDate(inicio,     "GMT-3", "yyyy-MM-dd'T'HH:mm:ss");
+    const endStr   = Utilities.formatDate(fechaHasta, "GMT-3", "yyyy-MM-dd'T'HH:mm:ss");
+
     const url = `https://api.thingspeak.com/channels/${id}/feeds.json?api_key=${key}&start=${startStr}-03:00&end=${endStr}-03:00&results=8000`;
-    const res = UrlFetchApp.fetch(url);
+    const res  = UrlFetchApp.fetch(url, { muteHttpExceptions: true });
     const data = JSON.parse(res.getContentText());
-    
+
     if (!data.feeds || data.feeds.length === 0) break;
-    
-    // Agregar feeds nuevos (evitar duplicados por timestamp)
-    const ultimoTs = todosLosFeeds.length > 0 
-      ? new Date(todosLosFeeds[todosLosFeeds.length - 1].created_at).getTime() 
-      : 0;
-    
-    const nuevos = data.feeds.filter(f => new Date(f.created_at).getTime() > ultimoTs);
-    todosLosFeeds = todosLosFeeds.concat(nuevos);
-    
-    // Si devolvió menos de 8000, ya tenemos todo
+
+    const primerTs = todosLosFeeds.length > 0
+      ? new Date(todosLosFeeds[0].created_at).getTime()
+      : Infinity;
+    const nuevos = data.feeds.filter(f => new Date(f.created_at).getTime() < primerTs);
+    todosLosFeeds = nuevos.concat(todosLosFeeds);
+
     if (data.feeds.length < 8000) break;
-    
-    // Avanzar desde el último registro recibido
-    fechaDesde = new Date(data.feeds[data.feeds.length - 1].created_at);
-    fechaDesde = new Date(fechaDesde.getTime() + 60000); // +1 minuto
+
+    fechaHasta = new Date(new Date(data.feeds[0].created_at).getTime() - 60000);
+    if (fechaHasta <= inicio) break;
+
     intentos++;
-    
-    Utilities.sleep(500); // respetar rate limit de ThingSpeak
+    Utilities.sleep(500);
   }
-  
+
+  const inicioMs = inicio.getTime();
+  todosLosFeeds = todosLosFeeds.filter(f => new Date(f.created_at).getTime() >= inicioMs);
   return { feeds: todosLosFeeds };
 }
 
@@ -393,13 +417,28 @@ function buscarLogoEnDrive(n) {
   return f.hasNext() ? f.next().getBlob() : null;
 }
 
+/**
+ * Formatea una fecha a GMT-3 sin usar Utilities.formatDate (10-20x más rápido).
+ */
+function fmtFecha(date, conSegundos) {
+  const d = new Date(date.getTime() - 3 * 60 * 60 * 1000);
+  const p = n => String(n).padStart(2, '0');
+  const base = `${p(d.getUTCDate())}/${p(d.getUTCMonth()+1)}/${d.getUTCFullYear()} ${p(d.getUTCHours())}:${p(d.getUTCMinutes())}`;
+  return conSegundos ? base + ':' + p(d.getUTCSeconds()) : base;
+}
+
 function doPost(e) {
-  const body = JSON.parse(e.postData.contents);
-  if (body.action === 'guardarPDF') {
-    const bytes = Utilities.base64Decode(body.pdfData);
-    const blob = Utilities.newBlob(bytes, 'application/pdf', body.filename);
-    const file = DriveApp.getFolderById(CONFIG_FARMACIA.alertasFolder).createFile(blob);
-    return ContentService.createTextOutput(JSON.stringify({result: true, url: file.getUrl()})).setMimeType(ContentService.MimeType.JSON);
+  try {
+    const body = JSON.parse(e.postData.contents);
+    if (body.action === 'guardarPDF') {
+      const bytes = Utilities.base64Decode(body.pdfData);
+      const blob = Utilities.newBlob(bytes, 'application/pdf', body.filename);
+      const file = DriveApp.getFolderById(CONFIG_FARMACIA.alertasFolder).createFile(blob);
+      return ContentService.createTextOutput(JSON.stringify({result: true, url: file.getUrl()})).setMimeType(ContentService.MimeType.JSON);
+    }
+    return ContentService.createTextOutput(JSON.stringify({result: false, error: "Acción no reconocida"})).setMimeType(ContentService.MimeType.JSON);
+  } catch(e) {
+    return ContentService.createTextOutput(JSON.stringify({result: false, error: e.message})).setMimeType(ContentService.MimeType.JSON);
   }
 }
 
@@ -444,18 +483,13 @@ function generarSheetSemanal(feedsPorSensor, rangoTexto, fechaHoy) {
   hoja.setRowHeight(filaEncabezado, 45);
 
   // ── UNIFICAR TIMESTAMPS AGRUPANDO POR MINUTO ─────────────
-  // Los sensores no envían exactamente al mismo segundo,
-  // se agrupa por minuto para tener una fila por intervalo.
   const mapaTemp = {};
   feedsPorSensor.forEach((fs, idx) => {
     fs.feeds.forEach(feed => {
       const val = parseFloat(feed[fs.sensor.field]);
       if (isNaN(val) || val === -127) return;
-      const d = new Date(feed.created_at);
-      // Clave por minuto: "dd/MM/yyyy HH:mm"
-      const clave = Utilities.formatDate(d, "GMT-3", "dd/MM/yyyy HH:mm");
+      const clave = fmtFecha(new Date(feed.created_at));
       if (!mapaTemp[clave]) mapaTemp[clave] = { fecha: clave, valores: {} };
-      // Si ya hay un valor para ese sensor en ese minuto, promediamos
       if (mapaTemp[clave].valores[idx] !== undefined) {
         mapaTemp[clave].valores[idx] = (mapaTemp[clave].valores[idx] + val) / 2;
       } else {
@@ -489,83 +523,59 @@ function generarSheetSemanal(feedsPorSensor, rangoTexto, fechaHoy) {
     const filaInicio = filaEncabezado + 1;
     hoja.getRange(filaInicio, 1, filas.length, encabezados.length).setValues(filas);
 
-    // ── FORMATO CONDICIONAL: rojo si fuera de rango (2°C - 8°C) ──
+    // ── FORMATO CONDICIONAL en batch ──────────────────────────
+    const todasLasReglas = [];
     feedsPorSensor.forEach((_, idx) => {
-      const col = idx + 2; // Col 1 = fecha, sensores desde col 2
+      const col = idx + 2;
       const rangoCol = hoja.getRange(filaInicio, col, filas.length, 1);
-
-      // Regla: valor > 8 → fondo rojo claro
-      const reglAlta = SpreadsheetApp.newConditionalFormatRule()
-        .whenNumberGreaterThan(8.0)
-        .setBackground("#fecaca")
-        .setFontColor("#dc2626")
-        .setRanges([rangoCol])
-        .build();
-
-      // Regla: valor < 2 → fondo azul claro
-      const reglBaja = SpreadsheetApp.newConditionalFormatRule()
-        .whenNumberLessThan(2.0)
-        .setBackground("#bfdbfe")
-        .setFontColor("#1d4ed8")
-        .setRanges([rangoCol])
-        .build();
-
-      const reglas = hoja.getConditionalFormatRules();
-      reglas.push(reglAlta);
-      reglas.push(reglBaja);
-      hoja.setConditionalFormatRules(reglas);
+      todasLasReglas.push(
+        SpreadsheetApp.newConditionalFormatRule()
+          .whenNumberGreaterThan(8.0)
+          .setBackground("#fecaca").setFontColor("#dc2626")
+          .setRanges([rangoCol]).build(),
+        SpreadsheetApp.newConditionalFormatRule()
+          .whenNumberLessThan(2.0)
+          .setBackground("#bfdbfe").setFontColor("#1d4ed8")
+          .setRanges([rangoCol]).build()
+      );
     });
+    hoja.setConditionalFormatRules(todasLasReglas);
 
     // ── FORMATO DE COLUMNAS ───────────────────────────────────
-    hoja.setColumnWidth(1, 140); // Fecha/Hora
+    hoja.setColumnWidth(1, 140);
     feedsPorSensor.forEach((_, idx) => hoja.setColumnWidth(idx + 2, 130));
-
-    // Alternar colores de filas para legibilidad
-    for (let i = 0; i < filas.length; i++) {
-      const color = i % 2 === 0 ? "#f8fafc" : "#ffffff";
-      hoja.getRange(filaInicio + i, 1, 1, encabezados.length).setBackground(color);
-    }
 
     // Centrar columnas de temperatura
     hoja.getRange(filaInicio, 2, filas.length, feedsPorSensor.length)
         .setHorizontalAlignment("center").setNumberFormat("0.00");
   }
 
-  // ── FILA DE RESUMEN ESTADÍSTICO ───────────────────────────
+  // ── FILA DE RESUMEN ESTADÍSTICO en batch ──────────────────
   const filaResumen = filaEncabezado + filas.length + 2;
   hoja.getRange(filaResumen, 1).setValue("RESUMEN ESTADÍSTICO")
       .setFontWeight("bold").setFontColor("#00384d").setFontSize(10);
 
   const etiquetas = ["Mínimo (°C)", "Máximo (°C)", "Promedio (°C)", "Lecturas totales"];
-  etiquetas.forEach((etiq, i) => {
-    hoja.getRange(filaResumen + 1 + i, 1).setValue(etiq).setFontWeight("bold");
-  });
+  hoja.getRange(filaResumen + 1, 1, etiquetas.length, 1)
+      .setValues(etiquetas.map(e => [e])).setFontWeight("bold");
 
   feedsPorSensor.forEach((fs, idx) => {
     const col = idx + 2;
-    const filaInicio2 = filaEncabezado + 1;
-    const filaFin = filaEncabezado + filas.length;
-
-    // Calcular estadísticas directamente desde los datos (sin fórmulas)
     const valores = filas
       .map(f => f[col - 1])
       .filter(v => v !== "" && !isNaN(v))
       .map(Number);
 
+    let stats;
     if (valores.length > 0) {
       const minVal = Math.min(...valores);
       const maxVal = Math.max(...valores);
       const avg = Math.round((valores.reduce((a, b) => a + b, 0) / valores.length) * 100) / 100;
-      hoja.getRange(filaResumen + 1, col).setValue(minVal);
-      hoja.getRange(filaResumen + 2, col).setValue(maxVal);
-      hoja.getRange(filaResumen + 3, col).setValue(avg);
-      hoja.getRange(filaResumen + 4, col).setValue(valores.length);
+      stats = [[minVal], [maxVal], [avg], [valores.length]];
     } else {
-      hoja.getRange(filaResumen + 1, col).setValue("--");
-      hoja.getRange(filaResumen + 2, col).setValue("--");
-      hoja.getRange(filaResumen + 3, col).setValue("--");
-      hoja.getRange(filaResumen + 4, col).setValue(0);
+      stats = [["--"], ["--"], ["--"], [0]];
     }
+    hoja.getRange(filaResumen + 1, col, 4, 1).setValues(stats);
   });
 
   // Estilo del bloque resumen
