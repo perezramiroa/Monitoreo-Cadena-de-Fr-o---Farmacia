@@ -288,43 +288,21 @@ function generarGraficoCurva(feeds, field, nombre) {
     .addColumn(Charts.ColumnType.NUMBER, "°C");
 
   const vals = feeds.map(f => parseFloat(f[field])).filter(v => !isNaN(v) && v !== -127);
-  if (vals.length === 0) {
-    dataTable.addRow(["Sin datos", 5]);
-    return Charts.newLineChart()
-      .setDataTable(dataTable).setDimensions(2200, 520)
-      .setColors(["#3b82f6"]).setOption("backgroundColor", "white")
-      .build().getAs('image/png');
-  }
-
+  if (vals.length === 0) vals.push(5);
   const minVal = Math.min(...vals);
   const maxVal = Math.max(...vals);
   const yMin = minVal - 0.5;
   const yMax = maxVal + 0.5;
 
-  const UMBRAL_GAP_MS = 10 * 60 * 1000;
   const numPuntos = 800;
   const step = Math.max(1, Math.floor(feeds.length / numPuntos));
 
-  const puntosMuestreados = [];
-  for (let i = 0; i < feeds.length; i += step) puntosMuestreados.push(feeds[i]);
-
-  let ultimoTsValido = null;
-
-  for (let i = 0; i < puntosMuestreados.length; i++) {
-    const f   = puntosMuestreados[i];
+  for (let i = 0; i < feeds.length; i += step) {
+    const f   = feeds[i];
     const val = parseFloat(f[field]);
     const date = new Date(f.created_at);
-    if (isNaN(date.getTime())) continue;
-
-    // Detectar gap temporal — romper la línea solo por cortes reales de conectividad
-    if (ultimoTsValido !== null && (date.getTime() - ultimoTsValido) > UMBRAL_GAP_MS) {
-      dataTable.addRow([fmtFecha(date).slice(0, 13), null]);
-    }
-
-    // -127 o NaN: omitir el punto sin romper la línea
-    if (!isNaN(val) && val !== -127) {
+    if (!isNaN(val) && val !== -127 && !isNaN(date.getTime())) {
       dataTable.addRow([fmtFecha(date).slice(0, 13), val]);
-      ultimoTsValido = date.getTime();
     }
   }
 
